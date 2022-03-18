@@ -26,14 +26,12 @@ def main():
     )
 
     # 内参矩阵 (需要改)
-    K = np.mat([[610.53, 0, 368.114], [0, 605.93, 223.969], [0, 0, 1]])
+    K = np.mat([[512/64, 0, 368.114], [0, 512/64, 223.969], [0, 0, 1]])
     """坐标转换"""
 
     world_coordinate = np.mat(
         [[92.4066588991363], [-216.3043427709651], [-226.3831620231209], [1]]
     )
-    print(f"世界坐标为:\n{world_coordinate}")
-
     # 世界坐标系转换为相加坐标系 （Xw,Yw,Zw）--> (Xc,Yc,Zc)
     camera_coordinate = Out * world_coordinate
     print(f"相机坐标为:\n{camera_coordinate}")
@@ -56,10 +54,10 @@ def main():
         pixel_coordinate[1],
         pixel_coordinate[2],
     )
-    tmp = 2000
+    tmp = 15
     pl1 = (tri_x - 20, tri_y)
-    pl2 = (tri_x - 20 - tmp, tri_y + tmp * math.tan(((7.5 * math.pi) / 180)))
-    pl3 = (tri_x - 20 - tmp, tri_y - tmp * math.tan(((7.5 * math.pi) / 180)))
+    pl2 = (tri_x - 20 - tmp, tri_y + tmp * math.sin(((7.5 * math.pi) / 180)))
+    pl3 = (tri_x - 20 - tmp, tri_y - tmp * math.sin(((7.5 * math.pi) / 180)))
     pr1 = (tri_x + 20, tri_y)
     pr2 = (tri_x + 20 + tmp, tri_y + tmp * math.tan(((7.5 * math.pi) / 180)))
     pr3 = (tri_x + 20 + tmp, tri_y - tmp * math.tan(((7.5 * math.pi) / 180)))
