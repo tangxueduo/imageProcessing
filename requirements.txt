@@ -29,3 +29,4 @@ pyyaml==5.4.1
 python-gdcm==3.0.9.1
 nibabel==3.2.2
 matplotlib==3.5.1
+pandas
