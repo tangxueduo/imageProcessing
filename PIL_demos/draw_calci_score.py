@@ -1,15 +1,16 @@
-import requests
 import json
-import matplotlib.pyplot as plt
-import numpy as np
 import logging
 import math
-import SimpleITK as sitk
-import pandas as pd
-from PIL import Image
 import os
 import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import pydicom
+import requests
+import SimpleITK as sitk
+from PIL import Image
 from pydicom.dataset import FileDataset
 
 
@@ -90,9 +91,9 @@ def main():
     tab = ax.table(cellText=tabel_list, 
                 colLabels=col, 
                 loc='center', 
-                cellLoc='center',
+                cellLoc='right',
                 colWidths=[0.25] * 5,
-                rowLoc='center',
+                rowLoc='right',
                 edges='closed',
                 colColours=["#171D2E"] * 4,
                 cellColours=colors
@@ -115,8 +116,10 @@ def main():
                 horizontalalignment='left',
                 size=4, weight='light',
                 color="#8A9EC3",
+                multialignment="left",
             )
-    ax.set_title("钙化评分表", x=0.1, y=0.8, fontsize=5, color="#FFFFFF", loc="left")
+    ax.set_title("钙化评分表", x=0.1, y=0.8, fontsize=5, color="#FFFFFF", loc="left",  bbox ={'facecolor':'#8A9EC3', 
+                   'alpha':0.3, 'pad':5})
     # ax.axis('off')
     
     # get max score in table_list
