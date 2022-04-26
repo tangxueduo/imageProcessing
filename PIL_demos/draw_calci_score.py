@@ -22,7 +22,7 @@ def main():
     param: save_dicom_path
     param: 
     """
-    url = "http://172.16.6.6:3333/series/1.2.392.200036.9116.2.1796265542.1617755474.4.1362300001.1/predict/ct_heart_cac_score"
+    url = "http://172.16.3.39:3333/series/1.3.12.2.1107.5.1.4.74241.30000021121413162366400013511/predict/ct_heart_cac_score"
     res = requests.get(url).json()
     # TODO: dicom取中间那张
     dcm_file = "/media/tx-deepocean/Data/DICOMS/ct_heart/CN010002-03168797/1.2.392.200036.9116.2.6.1.44063.1796265542.1618201762.186046/1.2.392.200036.9116.2.1796265542.1618202018.4.1000300001.1/1.2.392.200036.9116.2.1796265542.1618202018.770035.1.398"
@@ -48,21 +48,73 @@ def main():
     row=["LM", "LAD", "LCX", "RCA", "总计"]
     x, y, z = res["summary"]["spacing"]
     tabel_list = []
+        # 行名
+    artery_list = [
+        "LM",
+        "LAD",
+        "LCX",
+        "RCA",
+    ]  # vessel1, vessel2, vessel5, vessel9
+    for label in artery_list:
+        tabel_list.append([label, 0, 0, 0])
     ctaVolumePixel, equivalentMassHU, calcificationScore = 0, 0, 0
+
     for k, v in res["lesions"].items():
         for index, val in enumerate(v["contour"]["data"]):
-            ctaVolumePixel += val["pixelArea"]
-            if (val["avgHU"] != -9999):
-                equivalentMassHU += val["pixelArea"] * val["avgHU"]
-            for i in range(4):
-                calcificationScore += val["agatstonPixelArea"][i] * score[i]
-        # 计算容积
-        ctaVolume = round(ctaVolumePixel * x * y * z, 2)
-        # 计算等效质量
-        equivalentMass = round((equivalentMassHU * cparameter * x * y * z) / 1000, 2)
-        # 计算钙化积分
-        calcificationScore = round(calcificationScore * alpha, 2)
-        tabel_list.append([k, ctaVolume, equivalentMass, calcificationScore])  
+            if k == "vessel1" and vessel_name == "LM":
+                ctaVolume, equivalentMass, calcificationScore = cal_score(
+                    v,
+                    score,
+                    spacing_x,
+                    spacing_y,
+                    spacing_z,
+                    c_parameter,
+                    alpha,
+                )
+                tabel_list[0][1] = ctaVolume
+                tabel_list[0][2] = equivalentMass
+                tabel_list[0][3] = calcificationScore
+            elif k == "vessel2" and vessel_name == "LAD":
+                ctaVolume, equivalentMass, calcificationScore = cal_score(
+                    v,
+                    score,
+                    spacing_x,
+                    spacing_y,
+                    spacing_z,
+                    c_parameter,
+                    alpha,
+                )
+                tabel_list[1][1] = ctaVolume
+                tabel_list[1][2] = equivalentMass
+                tabel_list[1][3] = calcificationScore
+            elif k == "vessel5" and vessel_name == "LCX":
+                ctaVolume, equivalentMass, calcificationScore = cal_score(
+                    v,
+                    score,
+                    spacing_x,
+                    spacing_y,
+                    spacing_z,
+                    c_parameter,
+                    alpha,
+                )
+                tabel_list[2][1] = ctaVolume
+                tabel_list[2][2] = equivalentMass
+                tabel_list[2][3] = calcificationScore
+            elif k == "vessel9" and vessel_name == "RCA":
+                ctaVolume, equivalentMass, calcificationScore = cal_score(
+                    v,
+                    score,
+                    spacing_x,
+                    spacing_y,
+                    spacing_z,
+                    c_parameter,
+                    alpha,
+                )
+                tabel_list[3][1] = ctaVolume
+                tabel_list[3][2] = equivalentMass
+                tabel_list[3][3] = calcificationScore
+            else:
+                continue 
     
     total = [0, 0, 0, 0]
     for i in range(len(tabel_list)):
@@ -82,9 +134,9 @@ def main():
     fig.set_figwidth(2)
     fig.set_figheight(2)
 
-    ax= fig.add_axes([0.1,0.1,0.8,0.8])
+    ax= fig.add_axes([0, 0, 0, 0])
     ax.patch.set_facecolor("#171D2E")
-    
+
     # 单元格背景置为黑色
     colors = [["#171D2E"] * 4 for _ in range(5)]
     
@@ -142,6 +194,25 @@ def main():
     ds.InstanceNumber = 398
     edit_tags(ds, "seriesImages" in save_path, full_tag=False, is_vr=True)
     ds.save_as(save_path)
+
+def cal_score(v, score, spacing_x, spacing_y, spacing_z, c_parameter, alpha):
+    logger.debug(f"****************v:{v}")
+    ctaVolumePixel, equivalentMass, equivalentMassHU, calcificationScore = 0, 0, 0, 0
+    for index, val in enumerate(v["contour"]["data"]):
+        ctaVolumePixel += val["pixelArea"]
+        if val["avgHU"] != -9999:
+            equivalentMassHU += val["pixelArea"] * val["avgHU"]
+        for i in range(4):
+            calcificationScore += val["agatstonPixelArea"][i] * score[i]
+    # 计算容积
+    ctaVolume = round(ctaVolumePixel * spacing_x * spacing_y * spacing_z, 2)
+    # 计算等效质量
+    equivalentMass = round(
+        (equivalentMassHU * c_parameter * spacing_x * spacing_y * spacing_z) / 1000, 2
+    )
+    # 计算钙化积分
+    calcificationScore = round(calcificationScore * alpha, 2)
+    return ctaVolume, equivalentMass, calcificationScore
 
    
 def canvas2rgb_array(canvas):
