@@ -34,7 +34,7 @@ def main(sex, age, score):
     max_dict = {"F": 362, "M": 1178}
     fig = plt.figure(dpi=300, facecolor="#171D2E")
     fig.set_figwidth(2)
-    fig.set_figheight(2)
+    fig.set_figheight(2.4)
 
     rect1 = [0, 0.83, 1, 0.08] # [左, 下, 宽, 高] 规定的矩形区域 （全部是0~1之间的数，表示比例）
     rect2 = [0.15, 0.2, 0.7, 0.6]
@@ -68,15 +68,30 @@ def main(sex, age, score):
     ax2.vlines([47, 57, 67], 0, score, colors='#000000', alpha = 0.05, linewidth=0.5)
     ax2.spines["bottom"].set_linewidth(0.5)
     ax2.spines["left"].set_linewidth(0.5)
-    # ax2.spines['left'].set_position(('outward', 10))
-    # ax2.spines['left'].set_position(('axes', 0.3))
 
 
     # 修改轴线刻度值的颜色和大小
     plt.tick_params(axis='both', pad=-2, which='major', labelsize=5, colors="#8A9EC3", bottom=False, left=False, width=ax2.get_window_extent().width)
-    # 调整子图间距
-    # plt.subplots_adjust(left=0.1,bottom=0.1,right=0.15,top=0.15,wspace=0.15,hspace=0.15)
-    # plt.margins(2, 2)
+
+    ax= fig.add_axes([0.1,0.1,0.8,0.8])
+    ax.patch.set_facecolor("#171D2E")
+    x_range = [math.floor((35+39)/2), math.floor((40+44)/2), math.floor((45+49)/2), math.floor((50+54)/2), math.floor((55+59)/2), math.floor((60+64)/2), math.floor((65+70)/2)]
+    ax.xaxis.set_ticks(np.arange(37, 70, 10))
+    ax.set_ylim(bottom=0, top=2000, auto=True)
+    # 将左边框和下边框的颜色设为灰色
+    ax.spines['left'].set_color('#8A9EC3') 
+    ax.spines['bottom'].set_color('#8A9EC3')
+    # 去掉边框
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    #移位置 设为原点相交
+    ax.xaxis.set_ticks_position('bottom')
+    ax.spines['bottom'].set_position(('data',0))
+    ax.yaxis.set_ticks_position('left')
+    # ax.spines['left'].set_position(('data',0))
+    # 修改轴线刻度值的颜色和大小
+    plt.tick_params(axis='both', which='major', labelsize=5, colors="#8A9EC3", bottom=False, left=False, width=ax.get_window_extent().width)
+
     for k, v in sex_data_dict.items():
         if k == sex:
             for percent, yaxis in v.items():
@@ -99,7 +114,7 @@ def main(sex, age, score):
 
     leg = plt.legend(bbox_to_anchor=(0.05, 0.9), loc='upper left', borderaxespad=0, prop={'size': 4}, labelcolor="#FFFFFF", facecolor="#171D2E", edgecolor="#171D2E")
     
-    ax2.plot(age, score, color="#FFFFFF", marker="+", label="该患者所在位置", markersize=2)
+    ax2.plot(age, score, color="#FFFFFF", marker="+", label="该患者所在位置", markersize=3)
     ax2.set_xlabel("年龄", labelpad=1, loc="right", fontdict=dict(fontsize=5, color='#8A9EC3',
                        weight='bold'))
     ax2.set_ylabel("分数", labelpad=1, loc="top", fontdict=dict(fontsize=5, color='#8A9EC3',
