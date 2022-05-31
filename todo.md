@@ -1,0 +1,2 @@
+- config delete from __int__
+- shutile.rmtree
