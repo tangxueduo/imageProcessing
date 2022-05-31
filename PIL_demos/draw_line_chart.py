@@ -1,47 +1,37 @@
-import json
 import logging
 import math
 import os
 import time
 
-import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
-import requests
 import pydicom
-import SimpleITK as sitk
-from matplotlib.offsetbox import AnchoredText
-from matplotlib.patches import BoxStyle
-from matplotlib.path import Path
-from PIL import Image
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
-from pydicom.dataset import FileDataset
 from PIL import Image, ImageDraw, ImageFont
-import time
+from pydicom.dataset import FileDataset
 
 t0 = time.time()
 
+
 def main(sex, age, score):
-    marker_point = (age, score)
-    ds = pydicom.read_file('/media/tx-deepocean/Data/DICOMS/ct_heart/1.3.12.2.1107.5.1.4.74241.30000021112900504205800133754/1.3.12.2.1107.5.1.4.74241.30000021112900504205800133757')
+    # marker_point = (age, score)
+    ds = pydicom.read_file(
+        "/media/tx-deepocean/Data/DICOMS/ct_heart/1.3.12.2.1107.5.1.4.74241.30000021112900504205800133754/1.3.12.2.1107.5.1.4.74241.30000021112900504205800133757"
+    )
     vr_width = 512
     sex_data_dict = {
-    "F": {
-        "25%": [0, 0, 0, 0, 0, 0, 0],               
-        "50%": [0, 0, 0, 0, 0, 4, 24],
-        "75%": [0, 0, 0, 10, 33, 87, 123],
-        "90%": [4, 9, 23, 66, 140, 310, 362],
-      },
-    "M": {
-        "25%": [0, 0, 0, 0, 3, 14, 28], 
-        "50%": [0, 0, 3, 16, 41, 118, 151],
-        "75%": [2, 11, 44, 101, 187, 434, 569],
-        "90%": [21, 64, 176, 320, 502, 804, 1178],
-      },
+        "F": {
+            "25%": [0, 0, 0, 0, 0, 0, 0],
+            "50%": [0, 0, 0, 0, 0, 4, 24],
+            "75%": [0, 0, 0, 10, 33, 87, 123],
+            "90%": [4, 9, 23, 66, 140, 310, 362],
+        },
+        "M": {
+            "25%": [0, 0, 0, 0, 3, 14, 28],
+            "50%": [0, 0, 3, 16, 41, 118, 151],
+            "75%": [2, 11, 44, 101, 187, 434, 569],
+            "90%": [21, 64, 176, 320, 502, 804, 1178],
+        },
     }
-    max_dict = {"F": 362, "M": 1178}
     fig = plt.figure(dpi=300, facecolor="#171D2E")
     fig.set_figwidth(1.71)
     fig.set_figheight(1.71)
@@ -49,43 +39,76 @@ def main(sex, age, score):
     rect1 = [0, 0.83, 1, 0.08]  # [左, 下, 宽, 高] 规定的矩形区域 （全部是0~1之间的数，表示比例）
     rect2 = [0.15, 0.2, 0.7, 0.6]
 
-
-    #在fig中添加子图ax，并赋值位置rect
+    # 在fig中添加子图ax，并赋值位置rect
     ax1 = plt.axes(rect1)
     ax1.patch.set_facecolor("#262E48")
-    ax1.spines['top'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
-    ax1.spines['bottom'].set_visible(False)
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
+    ax1.spines["bottom"].set_visible(False)
     ax1.get_xaxis().set_visible(False)
     ax1.get_yaxis().set_visible(False)
     ax1.text(0.02, 0.5, "冠脉风险评估", fontsize=5, va="center", ha="left", color="#FFFFFF")
-    ax1.tick_params(axis='both', pad=0, which='major', top=False, right=False, bottom=False, left=False, width=ax1.get_window_extent().width)
-    ax1.spines['left'].set_visible(False)
-    ax1.spines['right'].set_visible(False)
+    ax1.tick_params(
+        axis="both",
+        pad=0,
+        which="major",
+        top=False,
+        right=False,
+        bottom=False,
+        left=False,
+        width=ax1.get_window_extent().width,
+    )
+    ax1.spines["left"].set_visible(False)
+    ax1.spines["right"].set_visible(False)
 
     ax2 = plt.axes(rect2)
     ax2.patch.set_facecolor("#171D2E")
-    x_range = [math.floor((35+39)/2), math.floor((40+44)/2), math.floor((45+49)/2), math.floor((50+54)/2), math.floor((55+59)/2), math.floor((60+64)/2), math.floor((65+70)/2)]
+    x_range = [
+        math.floor((35 + 39) / 2),
+        math.floor((40 + 44) / 2),
+        math.floor((45 + 49) / 2),
+        math.floor((50 + 54) / 2),
+        math.floor((55 + 59) / 2),
+        math.floor((60 + 64) / 2),
+        math.floor((65 + 70) / 2),
+    ]
     ax2.xaxis.set_ticks(np.arange(37, 70, 10))
     # ax2.set_ylim(bottom=0, top=1800, auto=True)
     ax2.set_xlim(37, 70)
-    ax2.set_ylim(0, (1500 if score <= 1500 else score)  + 80)
+    ax2.set_ylim(0, (1500 if score <= 1500 else score) + 80)
     # 将左边框和下边框的颜色设为黑色
-    ax2.spines['left'].set_color('#000000') 
-    ax2.spines['bottom'].set_color('#000000')
+    ax2.spines["left"].set_color("#000000")
+    ax2.spines["bottom"].set_color("#000000")
     # 去掉边框
-    ax2.spines['top'].set_visible(False)
-    ax2.spines['right'].set_visible(False)
-    ax2.vlines([47, 57, 67], 0, score, colors='#000000', alpha = 0.05, linewidth=0.5)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_visible(False)
+    ax2.vlines([47, 57, 67], 0, score, colors="#000000", alpha=0.05, linewidth=0.5)
     ax2.spines["bottom"].set_linewidth(0.5)
     ax2.spines["left"].set_linewidth(0.5)
 
+    # 修改轴线刻度值的颜色和大小
+    plt.tick_params(
+        axis="both",
+        pad=-2,
+        which="major",
+        labelsize=5,
+        colors="#8A9EC3",
+        bottom=False,
+        left=False,
+        width=ax2.get_window_extent().width,
+    )
 
     # 修改轴线刻度值的颜色和大小
-    plt.tick_params(axis='both', pad=-2, which='major', labelsize=5, colors="#8A9EC3", bottom=False, left=False, width=ax2.get_window_extent().width)
-
-    # 修改轴线刻度值的颜色和大小
-    plt.tick_params(axis='both', which='major', labelsize=5, colors="#8A9EC3", bottom=False, left=False, pad=-2, width=ax2.get_window_extent().width)
+    plt.tick_params(
+        axis="both",
+        which="major",
+        labelsize=5,
+        colors="#8A9EC3",
+        bottom=False,
+        left=False,
+        pad=-2,
+        width=ax2.get_window_extent().width,
+    )
 
     for k, v in sex_data_dict.items():
         if k == sex:
@@ -107,36 +130,57 @@ def main(sex, age, score):
                     line_color = "#FF5959"
                     ax2.plot(x_range, y4_data, line_color, linewidth=1, label="90%")
 
-    leg = plt.legend(bbox_to_anchor=(0.05, 0.9), loc='upper left', borderaxespad=0, prop={'size': 4}, labelcolor="#FFFFFF", facecolor="#171D2E", edgecolor="#171D2E")
-    
-    ax2.plot(age, score, color="#FFFFFF", marker="+", label="该患者所在位置", markersize=3)
-    ax2.set_xlabel("年龄", labelpad=1, loc="right", fontdict=dict(fontsize=5, color='#8A9EC3',
-                       weight='bold'))
-    ax2.set_ylabel("分数", labelpad=1, loc="top", fontdict=dict(fontsize=5, color='#8A9EC3',
-                       weight='bold'))
+    plt.legend(
+        bbox_to_anchor=(0.05, 0.9),
+        loc="upper left",
+        borderaxespad=0,
+        prop={"size": 4},
+        labelcolor="#FFFFFF",
+        facecolor="#171D2E",
+        edgecolor="#171D2E",
+    )
 
-    plt.figtext(0.22, 0.76,
-                "+",
-                horizontalalignment='center',
-                va="center",
-                size=4, weight='light',
-                color="#FFFFFF",
-            )
-    plt.figtext(0.27, 0.76,
-                "该患者所在位置",
-                horizontalalignment='left',
-                va="center",
-                size=4, weight='light',
-                color="#FFFFFF",
-            )
-    # plt.savefig('/media/tx-deepocean/Data/DICOMS/demos/000CACS1.png', pad_inches=0)
+    ax2.plot(age, score, color="#FFFFFF", marker="+", label="该患者所在位置", markersize=3)
+    ax2.set_xlabel(
+        "年龄",
+        labelpad=1,
+        loc="right",
+        fontdict=dict(fontsize=5, color="#8A9EC3", weight="bold"),
+    )
+    ax2.set_ylabel(
+        "分数",
+        labelpad=1,
+        loc="top",
+        fontdict=dict(fontsize=5, color="#8A9EC3", weight="bold"),
+    )
+
+    plt.figtext(
+        0.22,
+        0.76,
+        "+",
+        horizontalalignment="center",
+        va="center",
+        size=4,
+        weight="light",
+        color="#FFFFFF",
+    )
+    plt.figtext(
+        0.27,
+        0.76,
+        "该患者所在位置",
+        horizontalalignment="left",
+        va="center",
+        size=4,
+        weight="light",
+        color="#FFFFFF",
+    )
     # TODO: Extract the plot as an array
     plt_array = canvas2rgb_array(fig.canvas)
-    plt_array = plt_array.astype(dtype='uint8')
-    plt_shape = plt_array.shape
+    plt_array = plt_array.astype(dtype="uint8")
+    # plt_shape = plt_array.shape
 
     im_frame = Image.fromarray(plt_array)
-    save_path = '/media/tx-deepocean/Data/DICOMS/demos/000CACS1.dcm'
+    save_path = "/media/tx-deepocean/Data/DICOMS/demos/000CACS1.dcm"
 
     file_name = os.path.basename(save_path).replace(".dcm", "")
     im_frame = draw_tag(im_frame, file_name[3:], vr_width)
@@ -151,6 +195,7 @@ def main(sex, age, score):
     edit_tags(ds, "seriesImages" in save_path, full_tag=full_tag, is_vr=True)
     ds.save_as(save_path)
     print((time.time() - t0) * 1000)
+
 
 def draw_tag(im_frame: Image, tag: str, vr_width: int) -> Image:
     if im_frame.width != 1024 or im_frame.height != 1024:
@@ -175,12 +220,14 @@ def draw_tag(im_frame: Image, tag: str, vr_width: int) -> Image:
     )
     return im_frame
 
+
 def instance_number(file_name: str, index: int) -> int:
     try:
         return int(file_name[:3])
     except Exception:
-        logger.debug(f"invalid file_name for {file_name}")
+        logging.debug(f"invalid file_name for {file_name}")
     return index
+
 
 def round_aspect(number, key):
     return max(min(math.floor(number), math.ceil(number), key=key), 1)
@@ -193,17 +240,20 @@ def get_new_size(x, y, aspect):
         y = round_aspect(x / aspect, key=lambda n: 0 if n == 0 else abs(aspect - x / n))
     return x, y
 
+
 def canvas2rgb_array(canvas):
     """Adapted from: https://stackoverflow.com/a/21940031/959926"""
     canvas.draw()
     buf = np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8)
     ncols, nrows = canvas.get_width_height()
-    print(f'****ncols: {ncols}, nrows: {nrows}')
     scale = round(math.sqrt(buf.size / 3 / nrows / ncols))
     # return buf.reshape(scale * nrows, scale * ncols, 3)
-    return buf.reshape( scale * nrows, scale * ncols,3)
+    return buf.reshape(scale * nrows, scale * ncols, 3)
 
-def edit_tags(ds: FileDataset, series: bool = True, full_tag: bool = False, is_vr: bool = False):
+
+def edit_tags(
+    ds: FileDataset, series: bool = True, full_tag: bool = False, is_vr: bool = False
+):
     """edit tags according to our demand"""
     creation_date = time.strftime("%Y%m%d", time.localtime(time.time()))
     creation_time = time.strftime("%H%M%S", time.localtime(time.time()))
@@ -251,7 +301,6 @@ def edit_tags(ds: FileDataset, series: bool = True, full_tag: bool = False, is_v
         ds.WindowCenter = 300
 
 
-
 def gen_suid(uuid: str) -> str:
     IDP = "1.2.826.0.1.3680043.10"  # Infervision Dicom Prefix
     IDPS = IDP.split(".")
@@ -260,6 +309,7 @@ def gen_suid(uuid: str) -> str:
         index = -2
     uid = ".".join(IDPS + uuid.split(".")[index:])
     return uid[:64]
+
 
 def gen_uuid(uuid: str = "") -> str:
     """generate random StudyInstanceUid with Infervision Dicom Prefix"""
@@ -270,6 +320,7 @@ def gen_uuid(uuid: str = "") -> str:
     IDPS = IDP.split(".")
     uid = ".".join(IDPS + uuid.split(".")[len(IDPS) :])
     return uid[:64]
+
 
 def remove_extra_tags(ds: FileDataset):
     """remove unused tags"""
@@ -363,6 +414,5 @@ def remove_extra_tags(ds: FileDataset):
             continue
 
 
-if __name__ == '__main__':
-    main('M', 38, 50)
-    
+if __name__ == "__main__":
+    main("M", 38, 50)
