@@ -10,11 +10,27 @@ def timer(func):
     """
 
     @wraps(func)  # <- 用于保留原函数信息
-    def wraper(*args, **kwargs):
-        before = time()
+    def inner(*args, **kwargs):
+        before = time.time()
+        cpu_start = time.perf_counter()
         result = func(*args, **kwargs)
-        after = time()
-        print("elapsed: ", after - before)
+        after = time.time()
+        cpu_end = time.perf_counter()
+        print("elapsed: ", after - before, "cpu elapsed: ", cpu_end - cpu_start)
         return result
 
-    return wraper
+    return inner
+
+
+@timer
+def use_list(n: int):
+    return filter(lambda x: n % x == 0, range(1, n))
+
+
+@timer
+def use_list_comprehension(n: int):
+    return [i for i in range(1, n) if n % i == 0]
+
+
+use_list(1024)
+use_list_comprehension(1024)
