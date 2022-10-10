@@ -21,23 +21,33 @@ origin = vtkImage.GetOrigin()
 #     0, -1, 0, 0,
 #     0, 0, 0, 1
 # ]
-""" 轴状位 """
-elements = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+# """ 轴状位 """
+# elements = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
 """ 冠状位 """
-elements = [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1]
+# elements = [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1]
 
 """ 其他角度 """
 # elements = [
 #     1, 0, 0, 0,
-#     0, 0, -0.5, 0,
+#     0, 8.66025, -0.5, 0,
 #     0, 0.5, 0.866025, 0,
 #     0, 0, 0, 1
 # ]
+
+# elements = [
+#     1, 0.2, 0, 0,
+#     0, 1.2, 0, 0,
+#     0, 0, 1,0,
+#     0,0,0,1
+# ]
+
+elements = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
+#  512 ,512, 589
 center = [
-    origin[0] + spacing[0] * 257,  # 矢状面（sagittal plane）S
-    origin[1] + spacing[1] * 414,  # 冠状面（coronal plane）C
-    origin[2] + spacing[2] * 177,  # 横断面（transverse plane）A
+    origin[0] + spacing[0] * 512,  # 矢状面（sagittal plane）S
+    origin[1] + spacing[1] * 300,  # 冠状面（coronal plane）C
+    origin[2] + spacing[2] * 400,  # 横断面（transverse plane）A
 ]
 resliceAxes = vtk.vtkMatrix4x4()
 resliceAxes.DeepCopy(elements)
@@ -62,4 +72,5 @@ sitk_array = sitk_array.astype(np.int16)
 result = sitk.GetImageFromArray(sitk_array)
 result.SetMetaData("0028|1050", "300")
 result.SetMetaData("0028|1051", "800")
+result.SetMetaData("key", "")
 sitk.WriteImage(result, "./test.dcm")

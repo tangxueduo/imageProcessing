@@ -1,9 +1,10 @@
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import SimpleITK as sitk
 import math
 import time
+
+import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import SimpleITK as sitk
 
 custom_map = [
     [0, 0, 0.5019607843137255],
@@ -262,7 +263,8 @@ custom_map = [
     [0.5333333333333333, 0, 0],
     [0.5176470588235295, 0, 0],
     [0.5019607843137255, 0, 0],
-  ]
+]
+
 
 def gray2rgb_array(gray_array):
     temp_array = gray_array
@@ -279,27 +281,33 @@ def gray2rgb_array(gray_array):
     temp_array = (temp_array - min_pt_array) * scale
 
     rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1]))
-    #rgb_array[:, :, 0] = temp_array
-    #rgb_array[:, :, 1] = temp_array
-    #rgb_array[:, :, 2] = temp_array
+    # rgb_array[:, :, 0] = temp_array
+    # rgb_array[:, :, 1] = temp_array
+    # rgb_array[:, :, 2] = temp_array
     rgb_array = temp_array
     return rgb_array
 
-if __name__ == "__main__":
-    cbf_img = sitk.ReadImage('/media/tx-deepocean/Data/DICOMS/demos/28/MTT.nii.gz')
-    depth = cbf_img.GetDepth()
-    cbf_img = sitk.GetArrayFromImage(cbf_img)
-    t0 = time.time()
-    cbf_img = cbf_img[10,:,:]
 
-    cbf_img = gray2rgb_array(cbf_img)
-    
+if __name__ == "__main__":
+    cbf_img = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/28/MTT.nii.gz")
+    depth = cbf_img.GetDepth()
+    cbf_arr = sitk.GetArrayFromImage(cbf_img)
+
+    # for idx in range(depth):
+    t0 = time.time()
+    cbf_gray_arr = cbf_arr[10, :, :]
+
+    rgb_arr = gray2rgb_array(cbf_gray_arr)
+
     custom_map_arr = np.array(custom_map)
-    custom_map_arr = np.squeeze(np.dstack([custom_map_arr[:,2], custom_map_arr[:,1], custom_map_arr[:,0]]), 0)  # RGB => BGR
+    custom_map_arr = np.squeeze(
+        np.dstack([custom_map_arr[:, 2], custom_map_arr[:, 1], custom_map_arr[:, 0]]), 0
+    )  # RGB => BGR
     custom_map_arr = np.multiply(255, custom_map_arr)
-    cbf_img = cbf_img.astype(np.uint8)
-    
-    channels = [cv2.LUT(cbf_img, custom_map_arr[:,i]) for i in range(3)]
+    print(custom_map_arr)
+    rgb_arr = rgb_arr.astype(np.uint8)
+
+    channels = [cv2.LUT(rgb_arr, custom_map_arr[:, i]) for i in range(3)]
     result = np.dstack(channels)
     background_rgb = [result[0, 0, 0], result[0, 0, 1], result[0, 0, 2]]
     background_pixel = np.where(
@@ -309,6 +317,5 @@ if __name__ == "__main__":
     )
     result[background_pixel] = [0, 0, 0]
     print(time.time() - t0)
-    # cv2.imwrite("./result.jpg", result)
-
-
+    idx = 0
+    cv2.imwrite(f"./result{str(idx)}.jpg", result)
