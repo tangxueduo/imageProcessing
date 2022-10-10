@@ -13,11 +13,16 @@ BRAIN_AREA_MAP = {
     12: {"origin": "R-Basal nucleus", "relative": 11},  # 右基底节
     13: {"origin": "L-Cerebellum", "relative": 14},  # 左小脑
     14: {"origin": "R-Cerebellum", "relative": 13},  # 右小脑
-    15: "Brain stem",  # 脑干
+    15: {"origin": "Brain stem"},  # 脑干
     16: "Corpus callosum",  # 胼胝体
     17: {"origin": "L-Ventricle", "relative": 18},  # 左脑室
     18: {"origin": "R-Ventricle", "relative": 17},  # 右脑室
 }
-
-left_brain_label = [1, 3, 5, 7, 9, 11, 13, 17]
-right_brain_label = [2, 4, 6, 8, 10, 14, 18]
+LEFT_BRAIN_LABEL = [1, 3, 5, 7, 9, 11, 13, 17]
+RIGHT_BRAIN_LABEL = [2, 4, 6, 8, 10, 12, 14, 18]
+COLOR_MAP = {
+    "#FFFF00": [0, 255, 255],
+    "#FF5959": [89, 89, 255],
+    "#26CF70": [112, 207, 38],
+    "#3F87F5": [245, 135, 63],
+}

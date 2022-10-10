@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 
-grey_img = np.zeros([20, 256], np.uint8)
+# grey_img = np.zeros([20, 256], np.uint8)
+grey
 for i in range(20):
     for j in range(256):
         grey_img[i, j] = j
