@@ -18,14 +18,20 @@ from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 from skimage import measure
 
-from python_demos.mismatch_utils import (convert_ijk_to_xyz,
-                                         convert_noraml_to_standard_plane,
-                                         ddict2dict, get_cc, get_line,
-                                         get_point_on_plane_by_yz,
-                                         gray2rgb_array, np_array_to_dcm,
-                                         remove_small_volume)
+from python_demos.mismatch_utils import (
+    convert_ijk_to_xyz,
+    convert_noraml_to_standard_plane,
+    ddict2dict,
+    get_cc,
+    get_line,
+    get_point_on_plane_by_yz,
+    gray2rgb_array,
+    np_array_to_dcm,
+    remove_small_volume,
+    trans_list_to_array,
+)
 
-mask_path = "/media/tx-deepocean/Data/DICOMS/demos/1"
+mask_path = "/media/tx-deepocean/Data/DICOMS/demos/37"
 dcm_file = "/media/tx-deepocean/Data/DICOMS/demos/TMAX/TMAX023.dcm"
 ds = pydicom.read_file(dcm_file, force=True)
 rows, cols = 512, 512
@@ -158,6 +164,7 @@ class Mismatch:
         ttp_array,
         brain_area_array,
         spacing,
+        depth,
     ):
         self.cbf_array = cbf_array
         self.cbv_array = cbv_array
@@ -167,6 +174,7 @@ class Mismatch:
         self.brain_area_array = brain_area_array
         self.spacing = spacing
         self.voxel = self.spacing[0] * self.spacing[1] * self.spacing[2] / 1000
+        self.depth = depth
 
     def get_mismatch(
         self,
@@ -194,8 +202,8 @@ class Mismatch:
             core_infarct_mask,
             mismatch_lesion_mask,
             tmax_lesion_mask,
-            mtt_lesion_mask,
-            ttp_lesion_mask,
+            left_stem_mask,
+            right_stem_mask,
         ) = ([], [], [], [], [], [], [], [])
 
         cbf_normal = 50  # cbf 正常值
@@ -221,14 +229,16 @@ class Mismatch:
             tmax_low,
         ) = (0, 0, 0, 0, 0, 0, 0)
         for dcm_slice in range(self.cbf_array.shape[0]):
+            dcm_slice = 15
             rows, cols = self.cbf_array.shape[1:]
             # 视图选取去骨 tmip
             tmip_gray_array = tmip_array[dcm_slice, :, :]
             # gray to rgb
             tmip_rgb_array = gray2rgb_array(tmip_gray_array, 100, 50)
             [i, j, loc] = origin
-            loc = loc - dcm_slice * self.spacing[2]
-            # 由两点式确定直线方程 ，由于原点为左上，取Ax+By+C=0关于x轴对称的直线方程:Ax-By+C=0
+
+            loc = loc + (self.depth - 1 - dcm_slice) * self.spacing[2]
+            # # 由两点式确定直线方程 ，由于原点为左上，取Ax+By+C=0关于x轴对称的直线方程:Ax-By+C=0
             p1, p2 = get_point_on_plane_by_yz(
                 coefficient_a,
                 coefficient_b,
@@ -241,9 +251,10 @@ class Mismatch:
             )
             # 转像素坐标
             new_p1, new_p2 = [p1[0], p1[1], loc], [p2[0], p2[1], loc]
-            xyzp1 = convert_ijk_to_xyz(new_p1, [i, j, loc], self.spacing)
-            xyzp2 = convert_ijk_to_xyz(new_p2, [i, j, loc], self.spacing)
+            xyzp1 = convert_ijk_to_xyz(new_p1, origin, self.spacing)
+            xyzp2 = convert_ijk_to_xyz(new_p2, origin, self.spacing)
             (x1, y1), (x2, y2) = (xyzp1[0], xyzp1[1]), (xyzp2[0], xyzp2[1])
+            # (x1, y1), (x2, y2) = (563.3137852888025, 389.5496597290039), (264.29764387483607, 460.7999979853627)
             # 注意采用x=ky+b模型，原因是如果中线没有偏转，例x=10这种情况，x=ky+b不用考虑这种特殊情况，不用额外写个if条件判断
             k, b = get_line(x1, x2, y1, y2)
             # 获取某层
@@ -251,10 +262,11 @@ class Mismatch:
             cbv_gray_array = self.cbv_array[dcm_slice, :, :]
             tmax_gray_array = self.tmax_array[dcm_slice, :, :]
 
-            # 计算倾斜角
-            angle = (math.atan(k)) / math.pi * 180
-            # 计算中线中点
-            center = ((x1 + x2) / 2, (y1 + y2) / 2)
+            # # 计算倾斜角
+            angle = (math.atan2(y1 - y2, x1 - x2)) / math.pi * 180
+            # # 计算中线中点
+            center = (512 / 2, 512 / 2)
+            print(f"****angle: {angle}， center： {center}")
 
             # 所有层的灌注和梗死像素
             (
@@ -272,8 +284,6 @@ class Mismatch:
                 cbf_normal,
                 index,
                 rcbf_result,
-                k,
-                b,
             )
             slice_view_info[dcm_slice] = {}
             slice_view_info[dcm_slice].update(
@@ -339,6 +349,12 @@ class Mismatch:
             slice_view_info[dcm_slice].update(
                 {"tmax>10": tmax_high, "tmax>8": tmax_low}
             )
+            brain_gray_array = self.brain_area_array[dcm_slice, :, :]
+            # 获取 脑干 mask
+            left_stem_mask, right_stem_mask = self._get_stem_slice(
+                brain_gray_array, k, b, left_stem_mask, right_stem_mask
+            )
+
             # 获取 mismatch 视图 ,这里取巧， 利用rcbv和tmax计算视图计算好的像素 list
             (
                 mismatch_result,
@@ -373,9 +389,38 @@ class Mismatch:
             core_infarct_mask,
             slice_view_info,
             ctp_lesion,
+            left_stem_mask,
+            right_stem_mask,
         )
-        lesion_result = ddict2dict(ctp_lesion)
-        return result, lesion_result
+        ctp_lesion = ddict2dict(ctp_lesion)
+        return result, ctp_lesion
+
+    def _get_stem_slice(
+        self,
+        brain_gray_array,
+        k: float,
+        b: float,
+        left_stem_mask: list,
+        right_stem_mask: list,
+    ):
+        """获取脑干 0 ,1 mask"""
+        l_stem_single_mask = np.zeros((brain_gray_array.shape), np.uint8)
+        r_stem_single_mask = np.zeros((brain_gray_array.shape), np.uint8)
+
+        # 分别获取脑中线 上方 下方脑干区域坐标
+        stem_arr = np.argwhere(brain_gray_array == 15)
+        # 在异常点位置数组中判断哪些点的索引在中线下方
+        idx_bottom = np.argwhere((stem_arr[:, 0] - k * stem_arr[:, 1] - b) > 0)
+        # 在异常点位置数组中判断哪些点的索引在中线上方
+        idx_top = np.argwhere((stem_arr[:, 0] - k * stem_arr[:, 1] - b) <= 0)
+        # 因 argwhere输出二维数组，第二列全是0,只提取第一列索引
+        er_idx = idx_top[:, 0]  # 右侧
+        el_idx = idx_bottom[:, 0]  # 左侧
+        l_stem_single_mask[stem_arr[el_idx][:, 0], stem_arr[el_idx][:, 1]] = 1
+        r_stem_single_mask[stem_arr[er_idx][:, 0], stem_arr[er_idx][:, 1]] = 1
+        left_stem_mask.append(l_stem_single_mask)
+        right_stem_mask.append(r_stem_single_mask)
+        return left_stem_mask, right_stem_mask
 
     def get_lesions(
         self,
@@ -384,22 +429,29 @@ class Mismatch:
         core_infarct_mask,
         slice_view_info,
         ctp_lesion,
+        left_stem_mask,
+        right_stem_mask,
     ):
-        mismatch_lesion_mask = np.array(mismatch_lesion_mask).reshape(
-            (self.brain_area_array.shape)
+        mismatch_lesion_mask = trans_list_to_array(
+            mismatch_lesion_mask, self.cbf_array.shape
         )
-        low_perfusion_mask = np.array(low_perfusion_mask).reshape(
-            (self.brain_area_array.shape)
+        low_perfusion_mask = trans_list_to_array(
+            low_perfusion_mask, self.cbf_array.shape
         )
-        core_infarct_mask = np.array(core_infarct_mask).reshape(
-            (self.brain_area_array.shape)
-        )
+        core_infarct_mask = trans_list_to_array(core_infarct_mask, self.cbf_array.shape)
+        left_stem_mask = trans_list_to_array(left_stem_mask, self.cbf_array.shape)
+        right_stem_mask = trans_list_to_array(right_stem_mask, self.cbf_array.shape)
+
         lesions, lesion_brains = self.get_data_result(
             mismatch_lesion_mask,
             slice_view_info,
         )
         report = self.get_brain_area_paras(
-            list(lesion_brains), low_perfusion_mask, core_infarct_mask
+            list(lesion_brains),
+            low_perfusion_mask,
+            core_infarct_mask,
+            left_stem_mask,
+            right_stem_mask,
         )
         ctp_lesion["lesions"].update(lesions)
         ctp_lesion["lesions"]["CT_perfusion"]["report"] = report
@@ -486,6 +538,7 @@ class Mismatch:
             mis_single_lesion["info"]["MismatchVolume"] = round(
                 res1 * self.voxel - res2 * self.voxel, 1
             )
+            res2 = 1 if res2 == 0 else res2
             mis_single_lesion["info"]["rate"] = round(res1 / res2, 1)
             # rCBF
             rcbf_single_lesion["section"] = brain_areas
@@ -583,6 +636,7 @@ class Mismatch:
         lesions["Mismatch"]["Mismatch_view"]["Mismatch_abnormality"][
             "MismatchVolume"
         ] = (mis_sum_low - mis_sum_core)
+        mis_sum_core = 1 if mis_sum_core == 0 else mis_sum_core
         lesions["Mismatch"]["Mismatch_view"]["Mismatch_abnormality"]["rate"] = round(
             mis_sum_low / mis_sum_core, 1
         )
@@ -594,221 +648,342 @@ class Mismatch:
         lesion_brains: list,
         low_perfusion_mask: np.ndarray,
         core_infarct_mask: np.ndarray,
+        left_stem_mask: np.ndarray,
+        right_stem_mask: np.ndarray,
     ):
         report = {}
         for brain_label in lesion_brains:
             # 左右脑区都有灌注，计算左脑区，对侧取反
             if brain_label == 15 or brain_label == 16:
-                continue
-            label_origin = brain_label
-            label_relative = BRAIN_AREA_MAP[label_origin]["relative"]
-            origin_area = BRAIN_AREA_MAP[label_origin]["origin"]  # 脑区
-            relative_area = BRAIN_AREA_MAP[label_relative]["origin"]  # 对侧脑区
+                label_origin = brain_label
+                origin_area = BRAIN_AREA_MAP[label_origin]["origin"]
+                relative_area = 9999
+            else:
+                # label_origin: 1, 12,...
+                label_origin = brain_label
+                label_relative = BRAIN_AREA_MAP[label_origin]["relative"]
+                # origin_area: L-Parietal lobe...
+                origin_area = BRAIN_AREA_MAP[label_origin]["origin"]  # 脑区
+                relative_area = BRAIN_AREA_MAP[label_relative]["origin"]  # 对侧脑区
+
             if origin_area in report or relative_area in report:
                 continue
+            if label_origin == 15 or label_origin == 16:
+                report = self._get_alone_brain_tendency(
+                    report,
+                    label_origin,
+                    origin_area,
+                    low_perfusion_mask,
+                    core_infarct_mask,
+                    left_stem_mask,
+                    right_stem_mask,
+                )
+            else:
+                report = self._get_double_sides_tendency(
+                    report,
+                    label_origin,
+                    label_relative,
+                    origin_area,
+                    relative_area,
+                    low_perfusion_mask,
+                    core_infarct_mask,
+                )
+        return report
 
-            # 计算灌注脑区的异常参数
-            left_area_cbv, right_area_cbv = (
-                self.cbv_array[self.brain_area_array == label_origin].mean(),
-                self.cbv_array[self.brain_area_array == label_relative].mean(),
+    def _get_double_sides_tendency(
+        self,
+        report,
+        label_origin,
+        label_relative,
+        origin_area,
+        relative_area,
+        low_perfusion_mask,
+        core_infarct_mask,
+    ):
+        left_area_cbv, right_area_cbv = (
+            self.cbv_array[self.brain_area_array == label_origin].mean(),
+            self.cbv_array[self.brain_area_array == label_relative].mean(),
+        )
+        left_area_cbf, right_area_cbf = (
+            self.cbf_array[self.brain_area_array == label_origin].mean(),
+            self.cbf_array[self.brain_area_array == label_relative].mean(),
+        )
+        left_area_mtt, right_area_mtt = (
+            self.mtt_array[self.brain_area_array == label_origin].mean(),
+            self.mtt_array[self.brain_area_array == label_relative].mean(),
+        )
+        left_area_ttp, right_area_ttp = (
+            self.ttp_array[self.brain_area_array == label_origin].mean(),
+            self.ttp_array[self.brain_area_array == label_relative].mean(),
+        )
+        left_area_tmax, right_area_tmax = (
+            self.tmax_array[self.brain_area_array == label_origin].mean(),
+            self.tmax_array[self.brain_area_array == label_relative].mean(),
+        )
+        # 左右脑区均有病灶
+        if label_origin in LEFT_BRAIN_LABEL and label_relative in RIGHT_BRAIN_LABEL:
+            report[origin_area] = {}
+            report[relative_area] = {}
+            # 左脑区低灌注
+            origin_low_perfusion = round(
+                np.count_nonzero(
+                    low_perfusion_mask[self.brain_area_array == label_origin]
+                )
+                * self.voxel,
+                1,
             )
-            left_area_cbf, right_area_cbf = (
-                self.cbf_array[self.brain_area_array == label_origin].mean(),
-                self.cbf_array[self.brain_area_array == label_relative].mean(),
+            # 右脑区低灌注
+            relative_low_perfusion = round(
+                np.count_nonzero(
+                    low_perfusion_mask[self.brain_area_array == label_relative]
+                )
+                * self.voxel,
+                1,
             )
-            left_area_mtt, right_area_mtt = (
-                self.mtt_array[self.brain_area_array == label_origin].mean(),
-                self.mtt_array[self.brain_area_array == label_relative].mean(),
+            # 左脑区梗死区
+            origin_core_penumbra = round(
+                np.count_nonzero(
+                    core_infarct_mask[self.brain_area_array == label_origin]
+                )
+                * self.voxel,
+                1,
             )
-            left_area_ttp, right_area_ttp = (
-                self.ttp_array[self.brain_area_array == label_origin].mean(),
-                self.ttp_array[self.brain_area_array == label_relative].mean(),
+
+            # 右脑区梗死区
+            relative_core_penumbra = round(
+                np.count_nonzero(
+                    core_infarct_mask[self.brain_area_array == label_relative]
+                )
+                * self.voxel,
+                1,
             )
-            left_area_tmax, right_area_tmax = (
-                self.tmax_array[self.brain_area_array == label_origin].mean(),
-                self.tmax_array[self.brain_area_array == label_relative].mean(),
+
+            # cbf 趋势
+            origin_cbf, relative_cbf = self.get_brain_area_tendency(
+                left_area_cbf, right_area_cbf, both_area=True
             )
-            # TODO: 获取中线左右侧的脑干和胼胝体
-            # pass
+            # cbv 趋势
+            origin_cbv, relative_cbv = self.get_brain_area_tendency(
+                left_area_cbv, right_area_cbv, both_area=True
+            )
+            # mtt 趋势
+            origin_mtt, relative_mtt = self.get_brain_area_tendency(
+                left_area_mtt, right_area_mtt, both_area=True, is_time=True
+            )
+            # ttp 趋势
+            origin_ttp, relative_ttp = self.get_brain_area_tendency(
+                left_area_ttp, right_area_ttp, both_area=True, is_time=True
+            )
+            # tmax 趋势
+            origin_tmax, relative_tmax = self.get_brain_area_tendency(
+                left_area_tmax, right_area_tmax, both_area=True, is_time=True
+            )
 
-            # 左右脑区均有病灶
-            if label_origin in LEFT_BRAIN_LABEL and label_relative in RIGHT_BRAIN_LABEL:
-                report[str(origin_area)] = {}
-                report[str(relative_area)] = {}
-                # 左脑区低灌注为2
-                # low_perfusion_mask[self.brain_area_array == label_origin]
-                origin_low_perfusion = round(
-                    np.count_nonzero(
-                        low_perfusion_mask[self.brain_area_array == label_origin]
+            report[origin_area]["CBF"] = origin_cbf
+            report[relative_area]["CBF"] = relative_cbf
+
+            report[origin_area]["CBV"] = origin_cbv
+            report[relative_area]["CBV"] = relative_cbv
+
+            report[origin_area]["MTT"] = origin_mtt
+            report[relative_area]["MTT"] = relative_mtt
+
+            report[origin_area]["TTP"] = origin_ttp
+            report[relative_area]["TTP"] = relative_ttp
+
+            report[origin_area]["Tmax"] = origin_tmax
+            report[relative_area]["Tmax"] = relative_tmax
+
+            report[origin_area]["corePenumbra"] = origin_core_penumbra
+            report[origin_area]["lowPerfusion"] = origin_low_perfusion
+
+            report[relative_area]["corePenumbra"] = relative_core_penumbra
+            report[relative_area]["lowPerfusion"] = relative_low_perfusion
+        # 病灶只在左脑区
+        elif label_origin in LEFT_BRAIN_LABEL:
+            report[origin_area] = {}
+            # 计算 低灌注和梗死区
+            origin_core_penumbra = round(
+                np.count_nonzero(
+                    core_infarct_mask[self.brain_area_array == label_origin]
+                )
+                * self.voxel,
+                1,
+            )
+
+            origin_low_perfusion = round(
+                np.count_nonzero(
+                    low_perfusion_mask[self.brain_area_array == label_origin]
+                )
+                * self.voxel,
+                1,
+            )
+            origin_cbf, _ = self.get_brain_area_tendency(left_area_cbf, right_area_cbf)
+            report[origin_area]["CBF"] = origin_cbf
+            #  cbv
+            origin_cbv, _ = self.get_brain_area_tendency(left_area_cbv, right_area_cbv)
+            report[origin_area]["CBV"] = origin_cbv
+            # mtt
+            origin_mtt, _ = self.get_brain_area_tendency(
+                left_area_mtt, right_area_mtt, is_time=True
+            )
+            report[origin_area]["MTT"] = origin_mtt
+            # ttp
+            origin_ttp, _ = self.get_brain_area_tendency(
+                left_area_ttp, right_area_ttp, is_time=True
+            )
+            report[origin_area]["TTP"] = origin_ttp
+            # tmax
+            origin_tmax, _ = self.get_brain_area_tendency(
+                left_area_tmax, right_area_tmax, is_time=True
+            )
+            report[origin_area]["TMAX"] = origin_tmax
+            report[origin_area]["corePenumbra"] = origin_core_penumbra
+            report[origin_area]["lowPerfusion"] = origin_low_perfusion
+        elif label_origin in RIGHT_BRAIN_LABEL:
+            report[relative_area] = {}
+            # 计算 低灌注体积和梗死区体积
+            relative_core_penumbra = round(
+                np.count_nonzero(
+                    core_infarct_mask[self.brain_area_array == label_relative]
+                )
+                * self.voxel,
+                1,
+            )
+
+            relative_low_perfusion = round(
+                np.count_nonzero(
+                    low_perfusion_mask[self.brain_area_array == label_relative]
+                )
+                * self.voxel,
+                1,
+            )
+            relative_cbf, _ = self.get_brain_area_tendency(
+                right_area_cbf, left_area_cbf
+            )
+            report[relative_area]["CBF"] = relative_cbf
+
+            #  cbv
+            relative_cbv, _ = self.get_brain_area_tendency(
+                right_area_cbv, left_area_cbv
+            )
+            report[relative_area]["CBV"] = relative_cbv
+            # mtt
+            relative_mtt, _ = self.get_brain_area_tendency(
+                right_area_mtt, left_area_mtt, is_time=True
+            )
+            report[relative_area]["MTT"] = relative_mtt
+            # ttp
+            relative_ttp, _ = self.get_brain_area_tendency(
+                right_area_ttp, left_area_ttp, is_time=True
+            )
+            report[relative_area]["TTP"] = relative_ttp
+            # tmax
+            relative_tmax, _ = self.get_brain_area_tendency(
+                right_area_tmax, left_area_tmax, is_time=True
+            )
+            report[relative_area]["Tmax"] = relative_tmax
+            report[relative_area]["corePenumbra"] = relative_core_penumbra
+            report[relative_area]["lowPerfusion"] = relative_low_perfusion
+        return report
+
+    def get_brain_area_tendency(
+        self, label1, label2, both_area=False, is_time=False, threshold=0.5
+    ):
+        """获取脑区异常趋势
+        Args:
+            both_area: 是否涉及双侧脑区
+            is_time: 是否为时间维度参数
+            threshold: 左右持平的阈值
+        Return: tendency
+        """
+        if not both_area:
+            if label1 / label2 < threshold:
+                tendency = "average"
+            elif label1 > label2:
+                tendency = "above"
+            else:
+                tendency = "average" if is_time else "below"
+            return tendency, ""
+        else:
+            if label1 / label2 < threshold or label2 / label1 < threshold:
+                tendency1, tendency2 = "average", "average"
+            elif label1 > label2:
+                tendency1, tendency2 = (
+                    ("above", "average")
+                    if is_time
+                    else (
+                        "above",
+                        "below",
                     )
-                    * self.voxel,
-                    1,
                 )
-                # 右脑区低灌注为3
-                # low_perfusion_mask[self.brain_area_array == label_relative] = 3
-                relative_low_perfusion = round(
-                    np.count_nonzero(
-                        low_perfusion_mask[self.brain_area_array == label_relative]
+            else:
+                tendency1, tendency2 = (
+                    ("average", "above")
+                    if is_time
+                    else (
+                        "below",
+                        "above",
                     )
-                    * self.voxel,
-                    1,
                 )
-                # 左脑区梗死区为2
-                # core_infarct_mask[self.brain_area_array == label_origin] = 2
-                origin_core_penumbra = round(
-                    np.count_nonzero(
-                        core_infarct_mask[self.brain_area_array == label_origin]
-                    )
-                    * self.voxel,
-                    1,
-                )
+            return tendency1, tendency2
 
-                # 右脑区梗死区为3
-                # core_infarct_mask[self.brain_area_array == label_relative] = 3
-                relative_core_penumbra = round(
-                    np.count_nonzero(
-                        core_infarct_mask[self.brain_area_array == label_relative]
-                    )
-                    * self.voxel,
-                    1,
-                )
+    def _get_alone_brain_tendency(
+        self,
+        report,
+        label_origin,
+        origin_area,
+        low_perfusion_mask,
+        core_infarct_mask,
+        left_stem_mask,
+        right_stem_mask,
+    ):
+        """根据大脑中线位置，获取脑干、胼胝体 CTP 参数信息"""
+        report[origin_area] = {}
 
-                # cbf 趋势
-                origin_cbf, relative_cbf = self.get_brain_area_tendency(
-                    left_area_cbf, right_area_cbf, both_area=True
-                )
-                # cbv 趋势
-                origin_cbv, relative_cbv = self.get_brain_area_tendency(
-                    left_area_cbv, right_area_cbv, both_area=True
-                )
-                # mtt 趋势
-                origin_mtt, relative_mtt = self.get_brain_area_tendency(
-                    left_area_mtt, right_area_mtt, both_area=True
-                )
-                # ttp 趋势
-                origin_ttp, relative_ttp = self.get_brain_area_tendency(
-                    left_area_ttp, right_area_ttp, both_area=True
-                )
-                # tmax 趋势
-                origin_tmax, relative_tmax = self.get_brain_area_tendency(
-                    left_area_tmax, right_area_tmax, both_area=True
-                )
+        l_cbf_value, r_cbf_value = (
+            self.cbf_array[left_stem_mask == 1].mean(),
+            self.cbf_array[right_stem_mask == 1].mean(),
+        )
+        l_cbv_value, r_cbv_value = (
+            self.cbv_array[left_stem_mask == 1].mean(),
+            self.cbf_array[right_stem_mask == 1].mean(),
+        )
+        l_mtt_value, r_mtt_value = (
+            self.mtt_array[left_stem_mask == 1].mean(),
+            self.cbf_array[right_stem_mask == 1].mean(),
+        )
+        l_ttp_value, r_ttp_value = (
+            self.ttp_array[left_stem_mask == 1].mean(),
+            self.cbf_array[right_stem_mask == 1].mean(),
+        )
+        l_tmax_value, r_tmax_value = (
+            self.tmax_array[left_stem_mask == 1].mean(),
+            self.cbf_array[right_stem_mask == 1].mean(),
+        )
 
-                report[origin_area]["CBF"] = origin_cbf
-                report[relative_area]["CBF"] = relative_cbf
-
-                report[origin_area]["CBV"] = origin_cbv
-                report[relative_area]["CBV"] = relative_cbv
-
-                report[origin_area]["MTT"] = origin_mtt
-                report[relative_area]["MTT"] = relative_mtt
-
-                report[origin_area]["TTP"] = origin_ttp
-                report[relative_area]["TTP"] = relative_ttp
-
-                report[origin_area]["Tmax"] = origin_tmax
-                report[relative_area]["Tmax"] = relative_tmax
-
-                report[origin_area]["corePenumbra"] = origin_core_penumbra
-                report[origin_area]["lowPerfusion"] = origin_low_perfusion
-
-                report[relative_area]["corePenumbra"] = relative_core_penumbra
-                report[relative_area]["lowPerfusion"] = relative_low_perfusion
-            # 病灶只在左脑区
-            elif label_origin in LEFT_BRAIN_LABEL:
-                report[origin_area] = {}
-                # 计算 低灌注和梗死区
-                # core_infarct_mask[self.brain_area_array == label_origin] = 2
-                origin_core_penumbra = round(
-                    np.count_nonzero(
-                        core_infarct_mask[self.brain_area_array == label_origin]
-                    )
-                    * self.voxel,
-                    1,
-                )
-
-                # low_perfusion_mask[self.brain_area_array == label_origin] = 2
-                origin_low_perfusion = round(
-                    np.count_nonzero(
-                        low_perfusion_mask[self.brain_area_array == label_origin]
-                    )
-                    * self.voxel,
-                    1,
-                )
-                origin_cbf, _ = self.get_brain_area_tendency(
-                    left_area_cbf, right_area_cbf
-                )
-                report[origin_area]["CBF"] = origin_cbf
-                #  cbv
-                origin_cbv, _ = self.get_brain_area_tendency(
-                    left_area_cbv, right_area_cbv
-                )
-                report[origin_area]["CBV"] = origin_cbv
-                # mtt
-                origin_mtt, _ = self.get_brain_area_tendency(
-                    left_area_mtt, right_area_mtt
-                )
-                report[origin_area]["MTT"] = origin_mtt
-                # ttp
-                origin_ttp, _ = self.get_brain_area_tendency(
-                    left_area_ttp, right_area_ttp
-                )
-                report[origin_area]["TTP"] = origin_ttp
-                # tmax
-                origin_tmax, _ = self.get_brain_area_tendency(
-                    left_area_tmax, right_area_tmax
-                )
-                report[origin_area]["TMAX"] = origin_tmax
-                report[origin_area]["corePenumbra"] = origin_core_penumbra
-                report[origin_area]["lowPerfusion"] = origin_low_perfusion
-            elif label_origin in RIGHT_BRAIN_LABEL:
-                report[relative_area] = {}
-                origin_core_penumbra, origin_low_perfusion = 0, 0
-                # 计算 低灌注体积和梗死区体积
-                # core_infarct_mask[self.brain_area_array == label_relative] = 2
-                relative_core_penumbra = round(
-                    np.count_nonzero(
-                        core_infarct_mask[self.brain_area_array == label_relative]
-                    )
-                    * self.voxel,
-                    1,
-                )
-
-                # low_perfusion_mask[self.brain_area_array == label_relative] = 2
-                relative_low_perfusion = round(
-                    np.count_nonzero(
-                        low_perfusion_mask[self.brain_area_array == label_relative]
-                    )
-                    * self.voxel,
-                    1,
-                )
-                relative_cbf, _ = self.get_brain_area_tendency(
-                    right_area_cbf, left_area_cbf
-                )
-                report[relative_area]["CBF"] = relative_cbf
-
-                #  cbv
-                relative_cbv, _ = self.get_brain_area_tendency(
-                    right_area_cbv, left_area_cbv
-                )
-                report[relative_area]["CBV"] = relative_cbv
-                # mtt
-                relative_mtt, _ = self.get_brain_area_tendency(
-                    right_area_mtt, left_area_mtt
-                )
-                report[relative_area]["MTT"] = relative_mtt
-                # ttp
-                relative_ttp, _ = self.get_brain_area_tendency(
-                    right_area_ttp, left_area_ttp
-                )
-                report[relative_area]["TTP"] = relative_ttp
-                # tmax
-                relative_tmax, _ = self.get_brain_area_tendency(
-                    right_area_tmax, left_area_tmax
-                )
-                report[relative_area]["Tmax"] = relative_tmax
-                report[relative_area]["corePenumbra"] = relative_core_penumbra
-                report[relative_area]["lowPerfusion"] = relative_low_perfusion
+        cbf_tendency, _ = self.get_brain_area_tendency(l_cbf_value, r_cbf_value)
+        cbv_tendency, _ = self.get_brain_area_tendency(l_cbv_value, r_cbv_value)
+        mtt_tendency, _ = self.get_brain_area_tendency(l_mtt_value, r_mtt_value)
+        ttp_tendency, _ = self.get_brain_area_tendency(l_ttp_value, r_ttp_value)
+        tmax_tendency, _ = self.get_brain_area_tendency(l_tmax_value, r_tmax_value)
+        low_perfusion = round(
+            np.count_nonzero(low_perfusion_mask[self.brain_area_array == label_origin])
+            * self.voxel,
+            1,
+        )
+        core_penumbra = round(
+            np.count_nonzero(core_infarct_mask[self.brain_area_array == label_origin])
+            * self.voxel,
+            1,
+        )
+        report[origin_area]["CBF"] = cbf_tendency
+        report[origin_area]["CBV"] = cbv_tendency
+        report[origin_area]["MTT"] = mtt_tendency
+        report[origin_area]["TTP"] = ttp_tendency
+        report[origin_area]["Tmax"] = tmax_tendency
+        report[origin_area]["corePenumbra"] = core_penumbra
+        report[origin_area]["lowPerfusion"] = low_perfusion
         return report
 
     def get_brain_area_tendency(self, label1, label2, both_area=False):
@@ -895,8 +1070,6 @@ class Mismatch:
         #     src=tmip_rotated_image, M=rotate_matrix, dsize=(rows, cols)
         # )
         origin_image = rgb_array
-        # origin_image = origin_image.astype(np.uint8)
-        # origin_image = origin_image[:, :, ::-1]
         cv2.imwrite(f"./result_mismatch{str(index)}.jpg", origin_image)
         mismatch_result["Mismatch" + str(index)] = origin_image
         # np_array_to_dcm(ds, origin_image, f"./test{str(index)}.dcm", 127, 255, True)
@@ -911,24 +1084,19 @@ class Mismatch:
         cbf_normal,
         index,
         rcbf_result,
-        k,
-        b,
     ):
         core_infarct_errors = []
         rgb_array = tmip_rgb_array.copy()
         single_core_mask = np.zeros((cbf_gray_array.shape), np.uint8)
 
         # tmip 沿旋转矩阵旋转angle
-        rotate_matrix = cv2.getRotationMatrix2D(
-            center=center, angle=angle + 90, scale=1
-        )
+        rotate_matrix = cv2.getRotationMatrix2D(center=center, angle=angle, scale=1)
         tmip_rotated_image = cv2.warpAffine(
             src=rgb_array, M=rotate_matrix, dsize=(rows, cols)
         )
+        cv2.imwrite("./tmip_rotated_image.jpg", tmip_rotated_image)
+
         # cbf 沿旋转矩阵旋转angle
-        rotate_matrix = cv2.getRotationMatrix2D(
-            center=center, angle=angle + 90, scale=1
-        )
         rotated_image = cv2.warpAffine(
             src=cbf_gray_array, M=rotate_matrix, dsize=(rows, cols)
         )
@@ -944,6 +1112,8 @@ class Mismatch:
         for rcbf_threshold in rCBF:
             cbf_setting = rcbf_threshold["threshold"]
             color_bgr = color_map[rcbf_threshold["color"]]
+            l_mean = rotated_image[:, :256].mean()
+            r_mean = mirror[:, :256].mean()
             # 原侧值 / 镜像值,TODO: 没有用到正常值这一参数
             temp_cbf = np.divide(
                 rotated_image,
@@ -951,20 +1121,25 @@ class Mismatch:
                 out=np.zeros_like(rotated_image),
                 where=mirror > 0,
             )
-            error_arr = np.where((0 < temp_cbf) & (temp_cbf < cbf_setting / 100))
+            condition = (
+                (temp_cbf < (cbf_setting / 100))
+                if l_mean < r_mean
+                else (temp_cbf > 1 / (cbf_setting / 100))
+            )
+
+            # if l_mean < r_mean
+            error_arr = np.where((0 < temp_cbf) & condition)
+
             if cbf_setting == 40:
                 cbf_high = list(error_arr)
                 mask1[error_arr] = 255
-                # rgb_array[error_arr] = color_map[rCBF[0]["color"]]
             if cbf_setting == 30:
                 core_infarct_errors = error_arr
                 rotated_core_mask[error_arr] = 1
                 mask2[error_arr] = 255
-                # rgb_array[error_arr] = color_map[rCBF[1]["color"]]
             if cbf_setting == 20:
                 cbf_low = list(error_arr)
                 mask3[error_arr] = 255
-                # rgb_array[error_arr] = color_map[rCBF[2]["color"]]
 
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
         sum_B = get_cc(mask1, kernel)
@@ -982,18 +1157,14 @@ class Mismatch:
         thresh3 = cv2.morphologyEx(thresh3, cv2.MORPH_CLOSE, kernel, iterations=8)
         lesion_mask[np.where(thresh3 > 0)] = 1
         tmip_rotated_image[np.where(thresh3 > 0)] = color_map[rCBF[2]["color"]]
+
         # 沿旋转矩阵反向旋转 angle
-        rotate_matrix = cv2.getRotationMatrix2D(
-            center=center, angle=-angle - 90, scale=1
-        )
+        rotate_matrix = cv2.getRotationMatrix2D(center=center, angle=-angle, scale=1)
         origin_image = cv2.warpAffine(
             src=tmip_rotated_image, M=rotate_matrix, dsize=(rows, cols)
         )
         rcbf_result["rCBF" + str(index)] = origin_image
-        # origin_image = rgb_array
         cv2.imwrite(f"./result_rcbf{str(index)}.jpg", origin_image)
-        # origin_image = origin_image.astype(np.uint8)
-        # origin_image = origin_image[:, :, ::-1]
         single_core_mask = cv2.warpAffine(
             src=rotated_core_mask, M=rotate_matrix, dsize=(rows, cols)
         )
@@ -1124,9 +1295,6 @@ class Mismatch:
         thresh3 = cv2.morphologyEx(thresh3, cv2.MORPH_CLOSE, kernel, iterations=8)
         lesion_mask[np.where(thresh3 > 0)] = 1
         rgb_array[np.where(thresh3 > 0)] = color_map[Tmax[2]["color"]]
-
-        # rgb_array = rgb_array.astype(np.uint8)
-        # rgb_array = rgb_array[:, :, ::-1]
         tmax_result["tmax_" + str(index)] = rgb_array
         # cv2.imwrite(f"./result_tmax{str(index)}.jpg", rgb_array)
         return (
@@ -1148,18 +1316,18 @@ def main():
         if mask_file == "CBV.nii.gz":
             sitk_img = sitk.ReadImage(os.path.join(mask_path, mask_file))
             cbv_array = sitk.GetArrayFromImage(sitk_img)
-        if mask_file == "TMIP.nii.gz":
-            pass
 
     brain_array = sitk.GetArrayFromImage(
-        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/1/brain_area_mask.nii.gz")
+        sitk.ReadImage(
+            "/media/tx-deepocean/Data/DICOMS/demos/37/brain_area_mask.nii.gz"
+        )
     )
 
     tmax_array = sitk.GetArrayFromImage(
-        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/1/TMAX.nii.gz")
+        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/37/TMAX.nii.gz")
     )
     tmip_img = sitk.ReadImage(
-        "/media/tx-deepocean/Data/DICOMS/demos/1/TMIP_NO_SKULL.nii.gz"
+        "/media/tx-deepocean/Data/DICOMS/demos/37/TMIP_NO_SKULL.nii.gz"
     )
     spacing = tmip_img.GetSpacing()
     origin = tmip_img.GetOrigin()
@@ -1167,18 +1335,26 @@ def main():
     print(f"******depth: {depth}")
     tmip_array = sitk.GetArrayFromImage(tmip_img)
     mtt_array = sitk.GetArrayFromImage(
-        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/1/MTT.nii.gz")
+        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/37/MTT.nii.gz")
     )
     ttp_array = sitk.GetArrayFromImage(
-        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/1/TTP.nii.gz")
+        sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/37/TTP.nii.gz")
     )
     centerline = {
-        "point": [1.5378047113932656, 123.54758072638087, 311.18857166923374],
-        "vector": [0.9865327558945939, 0.15265591866623524, 0.05873067378453389],
+        "point": [13.614892619395746, 70.6815248380492, 356.8286597371511],
+        "vector": [-0.9994793046675267, -0.003673192254234554, 0.03205662490002515],
     }
     t_3 = time.time()
+    depth = tmip_img.GetDepth()
     mis = Mismatch(
-        mask_array, cbv_array, mtt_array, tmax_array, ttp_array, brain_array, spacing
+        mask_array,
+        cbv_array,
+        mtt_array,
+        tmax_array,
+        ttp_array,
+        brain_array,
+        spacing,
+        depth,
     )
     image_result, ctp_lesion = mis.get_mismatch(
         tmip_array,

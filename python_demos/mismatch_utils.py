@@ -52,13 +52,34 @@ def get_cc(mask1, kernel):
         Xb = np.where(thresh_B > 0)
         thresh_A_copy[Xb] = 0
         # 过滤小于300的
-        if len(Xb[0]) > 500:
+        if len(Xb[0]) > 200:
             sum_B[Xb] = 255
         thresh_B = np.zeros(mask1.shape, np.uint8)  # thresh_B 大小与A相同，像素值为0
     return sum_B
 
 
-def remove_small_volume(mask, threshold=5000):
+def get_rotate_direction(k, p1_x, p1_y, p2_x, p2_y):
+    """根据斜率和两点确定旋转方向"""
+    # 计算倾斜角，中线中点
+    if k == 0:
+        angle, center = 0, (
+            (p1_x + p2_x) / 2,
+            (p1_y + p2_y) / 2,
+        )
+    else:
+        angle, center = (math.atan(k)) / math.pi * 180, (
+            (p1_x + p2_x) / 2,
+            (p1_y + p2_y) / 2,
+        )
+    return angle, center
+
+
+def trans_list_to_array(mask_list, final_shape):
+    mask = np.array(mask_list).reshape(final_shape)
+    return mask
+
+
+def remove_small_volume(mask, threshold=1000):
     """
     :param mask:  二值图像（3D）
     :param thread: 保留体积大于指定阈值的连通域
@@ -127,6 +148,7 @@ def convert_ijk_to_xyz(point, patient_position, spacing):
     """物理坐标，转像素坐标"""
     sub_abs = np.abs(np.subtract(point, patient_position))
     xyz = np.divide(sub_abs, spacing)
+    xyz = [round(i) for i in xyz]
     return xyz
 
 
