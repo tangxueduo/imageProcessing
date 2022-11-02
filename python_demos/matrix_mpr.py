@@ -5,6 +5,8 @@ import SimpleITK as sitk
 import vtkmodules.all as vtk
 from vtkmodules.util.vtkImageExportToArray import vtkImageExportToArray
 
+""" 补充正交mpr 矩阵切片 """
+
 
 def get_matrix(position: str, angle):
     """失状位"""
@@ -19,12 +21,24 @@ def get_matrix(position: str, angle):
     else:
         print("position can not found")
     """ 其他角度 """
-    # elements = [
-    #     1, 0, 0, 0,
-    #     0, 8.66025, -0.5, 0,
-    #     0, 0.5, 0.866025, 0,
-    #     0, 0, 0, 1
-    # ]
+    elements = [
+        -0.797459,
+        0,
+        -0.603374,
+        0.222664,
+        0,
+        1,
+        0,
+        -6.81277,
+        -0.603374,
+        0,
+        0.797459,
+        60.5695,
+        0,
+        0,
+        0,
+        1,
+    ]
 
     # elements = [
     #     1, 0.2, 0, 0,
@@ -33,6 +47,11 @@ def get_matrix(position: str, angle):
     #     0,0,0,1
     # ]
     return elements
+
+
+def get_mpr_total():
+    """根据方位来获取总张数，mpr应该是extent最大值，故不需要该接口"""
+    pass
 
 
 def get_mpr():
@@ -50,9 +69,9 @@ def get_mpr():
     #  512 ,512, 589
     dcm_idx = 0
     center = [
-        origin[0] + spacing[0] * 512,  # 矢状面（ sagittal plane）S
-        origin[1] + spacing[1] * 300,  # 冠状面（ coronal plane）C
-        origin[2] + spacing[2] * dcm_idx,  # 横断面（transverse plane）A
+        origin[0] + spacing[0] * (extent[0] + extent[1]),  # 矢状面（ sagittal plane）S
+        origin[1] + spacing[1] * (extent[2] + extent[3]),  # 冠状面（ coronal plane）C
+        origin[2] + spacing[2] * (extent[4] + extent[5]),  # 横断面（transverse plane）A
     ]
     resliceAxes = vtk.vtkMatrix4x4()
     resliceAxes.DeepCopy(elements)
@@ -76,7 +95,6 @@ def get_mpr():
     result = sitk.GetImageFromArray(sitk_array)
     result.SetMetaData("0028|1050", "300")
     result.SetMetaData("0028|1051", "800")
-    result.SetMetaData("key", "")
     sitk.WriteImage(result, "./test.dcm")
 
 
