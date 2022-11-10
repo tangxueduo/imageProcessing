@@ -96,7 +96,7 @@ def get_total_by_matrix(
     """
     total = 0
     st_origin = [111, 222, 222]
-    # TODO: 获取旋转后三个方位右下角的原点
+    # TODO: 获取旋转后最后一张的左上角的原点
     origin = [111, 2222, 4444]
     if azimuth_type == 1:
         # TODO: 确认重建后的 spacing
@@ -111,7 +111,6 @@ def get_total_by_matrix(
         total = math.floor((origin[0] - slab_thickness - st_origin[0]) / slab_thickness)
     else:
         raise "azimuth_type input error"
-
     return total
 
 
@@ -130,7 +129,7 @@ def get_mpr(
         {"dcm_path": "", "boxes": [], counter: []}
     """
     res = {}
-    nii_path = "/media/tx-deepocean/Data/DICOMS/demos/1.2.840.113619.2.416.77348009424380358976506205963520437809_nobone.nii.gz"
+    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113619.2.416.77348009424380358976506205963520437809.nii.gz"
     dcm_path = "/media/tx-deepocean/Data/DICOMS/ct_cerebral/CN010002-13696724/1.2.840.113619.2.416.10634142502611409964348085056782520111/1.2.840.113619.2.416.77348009424380358976506205963520437809/1.2.840.113619.2.416.2106685279137426449336212617073446717.1"
     ds = pydicom.read_file(dcm_path, stop_before_pixels=True, force=True)
     # https://blog.csdn.net/qq_41023026/article/details/118891837
@@ -138,53 +137,29 @@ def get_mpr(
     img_arr = sitk.GetArrayFromImage(img)  # (z,y,x)
     img_shape = img_arr.shape
 
-    img_arr = img_arr[:, :, :]
-    img_arr = np.ascontiguousarray(img_arr)
-
     # 根据层厚 SliceThickness 层间距 计算 mip 各方位总层数, SpacingBetweenSlices
     # total = get_total_by_matrix(matrix, extent)
     t0 = time.time()
     spacing = img.GetSpacing()
-    print(f"***spacing: {spacing}")
-    origin = img.GetOrigin()
-    print(f"*****nii 原点: {origin}")
-    st_origin = ds.ImagePositionPatient
+    st_origin = img.GetOrigin()
     print(f"*****ImageOrientationPatient: {ds.ImageOrientationPatient}")
 
-    reader = vtk_image_from_array(img_arr, spacing, origin)
+    reader = vtk_image_from_array(img_arr, spacing, st_origin)
 
     # 获取物理信息
     extent = reader.GetOutput().GetExtent()  # 维度
     print(f"extent: {extent}")  # (x, y, z)
-    spacing = reader.GetOutput().GetSpacing()  # 间隔
-    origin = reader.GetOutput().GetOrigin()  # 原点
-    print(f"*****vtk 原点: {origin}")
 
-    # TODO: 根据角度分别计算 X, Y, Z 旋转矩阵
-    # matrix = get_matrix(angle=90, axis="X")
     # ras to 像素坐标
     ijk_to_ras_direction = [-1, 0, 0, 0, -1, 0, 0, 0, 1]
 
     # TODO: 根据层厚 slab_thickness 层间距 原点，计算重建层数起止位置 done
     # 轴状位
     if azimuth_type == 1:
-        matrix = [
-            0.975808,
-            0,
-            -0.218629,
-            37.5841,
-            0,
-            -1,
-            0,
-            -6.81277,
-            0.218629,
-            0,
-            0.975808,
-            -104.264,
-            0,
-            0,
-            0,
-            1,
+        matrix = [0.975808, 0, -0.218629, 37.5841,
+            0, -1, 0, -6.81277,
+            0.218629, 0, 0.975808, -104.264,
+            0, 0, 0, 1,
         ]
         rotate_m = [[0.975808, 0, 0.218629], [0, -1, 0], [-0.218629, 0, 0.975808]]
         # 最后一张原点
@@ -202,7 +177,10 @@ def get_mpr(
         rotate_spacing = [0.5450804732219816, 0.5585940000000003, 0.6098799768055843]
         z_idx = math.floor((matrix[11] - rotate_st_origin[2]) / rotate_spacing[2])
         print([z_idx * i for i in rotate_spacing])
+        # 获取center对应的中间层index
         k_idx = (rotate_st_origin + [z_idx * i for i in rotate_spacing]).tolist()
+
+        # 获取中间层的 cntour 信息, 若没有返回[]
         rotate_st_origin = rotate_st_origin.tolist()
         rotate_ed_origin = rotate_ed_origin.tolist()
 
@@ -239,9 +217,9 @@ def get_mpr(
         slice_nums = max_idx - min_idx
         # 计算体数据中心点
         center = []
-        center.append(origin[0] + spacing[0] * 0.5 * (extent[0] + extent[1]))  # 失
-        center.append(origin[1] + spacing[1] * 0.5 * (extent[2] + extent[3]))  # 冠
-        center.append(origin[2] + spacing[2] * 0.5 * (min_idx + max_idx))  # 轴
+        center.append(st_origin[0] + spacing[0] * 0.5 * (extent[0] + extent[1]))  # 失
+        center.append(st_origin[1] + spacing[1] * 0.5 * (extent[2] + extent[3]))  # 冠
+        center.append(st_origin[2] + spacing[2] * 0.5 * (min_idx + max_idx))  # 轴
         print(f"*****center:  {center}")
         # reslice.SetOutputSpacing(spacing[0], spacing[1], rebuild_spacing) # 区分轴冠失
 
@@ -297,14 +275,12 @@ def get_mpr(
     extractVOI.SetVOI(extent)
     extractVOI.Update()
 
-    # mip SetResliceAxesOrigin()方法还可以用于提供切片将通过的(x，y，z)点。
+    # mip SetResliceAxesOrigin() 方法还可以用于提供切片将通过的(x，y，z)点。
     reslice = vtk.vtkImageSlabReslice()
     reslice.SetInputConnection(extractVOI.GetOutputPort())  # 截取的体数据
     reslice.SetOutputDimensionality(2)  # 设置输出为2维图片
     reslice.SetInterpolationModeToLinear()  # 差值
-
-    rotate_spacing = reslice.GetOutputSpacing()
-    print(f"rotate_spacing: {rotate_spacing}")
+    # reslice.SetOutputSpacing()
 
     if rebuild_type == "MIP":
         reslice.SetBlendModeToMax()
@@ -328,7 +304,7 @@ def get_mpr(
     # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing,
     sitk.WriteImage(result, "./test.dcm")
 
-    # contour = get_model_contour()
+    # contour = find_contours()
     contour = []
     contour_dic = {}
     contour_dic["contours"] = [
@@ -387,7 +363,7 @@ def get_physical(series_path):
     return
 
 
-def get_model_contour():
+def find_contours():
     """调用模型contour"""
     pass
     return []
@@ -395,7 +371,7 @@ def get_model_contour():
 
 def main():
     series_path = "/media/tx-deepocean/Data/DICOMS/ct_cerebral/CN010023-1510071117/1.3.46.670589.33.1.63780596181185791300001.5349461926886765269/1.3.46.670589.33.1.63780596345132168500001.4829782583723493361"
-    slab_thickness = 50
+    slab_thickness = 10
     scale = 1
     # TODO: 层厚小于 1mm 情况前端控制？
     matrix = [
