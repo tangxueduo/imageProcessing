@@ -1,66 +1,40 @@
 import numpy as np
+import cv2
+import SimpleITK as sitk
 
-# from skimage import measure
-# from typing import Dict
 
-# # cc, cc_num = measure.label(mask, return_num=True, connectivity=1)
-# # arr = np.ones((16, 512, 512))
-# # arr[2:250:250] = 1
-# # arr[3:250:250] = 1
-# # arr[4:250:250] = 1
+nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113619.2.416.77348009424380358976506205963520437809.nii.gz"
+img_arr = sitk.GetArrayFromImage(sitk.ReadImage(nii_path))
 
-# # arr[2:260:260] = 1
-# # arr[3:260:260] = 1
-# # arr[4:260:260] = 1
 
-# arr = np.array([
-#     [2, 3, 4],
-#     [1, 2, 3],
-#     [4, 5, 6]
-# ])
+roi = img_arr[400,:,:].astype(np.uint8)
+roi[0,0] = 0
+# roi[:,:]=(255,0,0)
+print(roi.shape)
 
-# direction = np.array([
-#     [-1,0,0],
-#     [0,-1,0],
-#     [0,0,1]
-# ])
+# 
+pt1 = (74, 0)
+pt2 = (0, 144)
+pt3 = (144, 144)
 
-# rotate_m = np.array([
-#     [0.965339, -0.0903941, -0.244845],
-#     [0.244845, 0.638547, 0.729595],
-#     [0.0903941, -0.764256, 0.638547]
+triangle_cnt = np.array( [pt1, pt2, pt3] )
+center = (512//2, 512//2)
+M = cv2.getRotationMatrix2D(center, 40, 0.75)
+# M = np.array([[0.821812, -0.168383, 100],[-0.0268499, -0.965716, 100]])
+# M = np.array([
+#     [    0.821812, -0.168383, 0.544309],
+#     [-0.0268499, -0.965716, -0.258208],
+#     [-0.569126, -0.197584, 0.798158]
 #     ])
-# rotate_m = rotate_m.T
-# print(rotate_m)
+img = cv2.warpAffine(roi, M, (roi.shape[1], roi.shape[0]))
+# img = np.dot(roi, M)
+# cv2.drawContours(img, [triangle_cnt], 0, (0,255,0), -1)
+# img = np.roll(img, 1)
 
-# mask = np.ones((16, 512, 512))
-# mask_slice = (mask[13,:,:])
-# mask_slice_rotate = np.dot(rotate_m, mask_slice)
-# print(mask_slice_rotate)
+cv2.imshow("origin", img)
+cv2.imwrite("./test.png", img)
 
-
-# # 左乘 变换矩阵-> M1 = T * M
-# # matrix.setRotate(θ);
-# # matrix.preTranslate(-10, -10); // 先乘 m` = m*t 右乘
-# # matrix.postTranslate(10, 10); // 后乘 m` = t*m 左乘
-
-# res = np.dot(direction, arr)
-# print(res)
-
-
-# sp1 = np.array([0.5076851935099742, 0.5585940000000003, 0.5680391231265176])
-sp = np.array([0.558594, 0.558594, 0.625000])
-
-m = np.array(
-    [
-        [-0.908863, 0, -0.417096],
-        [0, 1, 0],
-        [-0.417096, 0, 0.908863],
-    ]
-)
-# 先转lps ,再转置
-print(f"{m.T}, ******\n{m[0,:]}")
-print("*******************")
-
-print(sp)
-print(np.dot(sp, m.T))
+while 1:
+    if cv2.waitKey(100) == 27:  # 100ms or esc(ascii 等于27, 跳出循环)
+        break
+cv2.destroyAllWindows()

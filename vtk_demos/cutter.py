@@ -1,9 +1,19 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# noinspection PyUnresolvedReferences
 import vtk
-import numpy as np
+import vtkmodules.vtkInteractionStyle
+# noinspection PyUnresolvedReferences
+import vtkmodules.vtkRenderingOpenGL2
 from vtkmodules.vtkCommonColor import vtkNamedColors
+from vtkmodules.vtkCommonCore import vtkIdList
 from vtkmodules.vtkCommonDataModel import vtkPlane
-from vtkmodules.vtkFiltersCore import vtkCutter
-from vtkmodules.vtkFiltersSources import vtkCubeSource
+from vtkmodules.vtkFiltersCore import (
+    vtkCutter,
+    vtkStripper
+)
+from vtkmodules.vtkFiltersSources import vtkSphereSource
 from vtkmodules.vtkRenderingCore import (
     vtkActor,
     vtkPolyDataMapper,
@@ -11,107 +21,135 @@ from vtkmodules.vtkRenderingCore import (
     vtkRenderWindowInteractor,
     vtkRenderer
 )
-colors = vtkNamedColors()
+import SimpleITK as sitk
+from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
+from vtkmodules.vtkFiltersCore import vtkContourFilter
+from vtkmodules.vtkFiltersModeling import vtkOutlineFilter
 
-# 导入data
+
+def vtk_image_from_array(slice_data, spacing, origin):
+    vtk_image = vtkImageImportFromArray()
+    vtk_image.SetArray(slice_data)
+    vtk_image.SetDataSpacing(spacing)
+    vtk_image.SetDataOrigin(origin)
+    # vtk_image.SetDataExtent(extent)
+    vtk_image.Update()
+    return vtk_image
+
+nii_path = "/media/tx-deepocean/Data/DICOMS/demos/cerebral_1/cerebral-seg.nii.gz"
+# img = sitk.ReadImage(nii_path)
+# spacing = img.GetSpacing()
+# origin = img.GetOrigin()
+# arr = sitk.GetArrayFromImage(img)
+# vtk_img = vtk_image_from_array(arr, spacing, origin)
 reader = vtk.vtkNIFTIImageReader()
-reader.SetFileName('/media/tx-deepocean/Data/DICOMS/demos/cerebral_1/aneurysm_mask.nii.gz')
+reader.SetFileName(nii_path)
 reader.Update()
 
+def main():
+    colors = vtkNamedColors()
+    lineColor = colors.GetColor3d('yellow')
+    modelColor = colors.GetColor3d('silver')
+    backgroundColor = colors.GetColor3d('black')
+
+    modelSource = vtkSphereSource()
+
+    plane = vtkPlane()
+
+    cutter = vtkCutter()
+    cutter.SetInputConnection(reader.GetOutputPort())
+    cutter.SetCutFunction(plane)
+    #  切割10个， 从-0.5位置开始，
+    cutter.GenerateValues(10, -0.5, 0.5)
+
+    # stripper 获取三角片
+    stripper = vtkStripper()
+    stripper.SetInputConnection(cutter.GetOutputPort())
+    stripper.JoinContiguousSegmentsOn()
+
+    # 将三角片映射为几何数据
+    linesMapper = vtkPolyDataMapper()
+    linesMapper.SetInputConnection(stripper.GetOutputPort())
+
+    lines = vtkActor()
+    lines.SetMapper(linesMapper)
+    lines.GetProperty().SetDiffuseColor(lineColor)
+    lines.GetProperty().SetLineWidth(3.)
+
+    # 提取contour， 渲染管线filter -> mapper -> actor 
+    iso = vtkContourFilter()
+    iso.SetInputConnection(cutter.GetOutputPort())
+    iso.GenerateValues(12, -100, 1150)
+
+    isoMapper = vtkPolyDataMapper()
+    isoMapper.SetInputConnection(iso.GetOutputPort())
+    isoMapper.ScalarVisibilityOff()
+
+    isoActor = vtkActor()
+    isoActor.SetMapper(isoMapper)
+    isoActor.GetProperty().SetColor(colors.GetColor3d('yellow'))
+    
+
+    outline = vtkOutlineFilter()
+    outline.SetInputConnection(cutter.GetOutputPort())
+
+    outlineMapper = vtkPolyDataMapper()
+    outlineMapper.SetInputConnection(outline.GetOutputPort())
+
+    outlineActor = vtkActor()
+    outlineActor.SetMapper(outlineMapper)
+    outlineActor.GetProperty().SetColor(colors.GetColor3d("blue"))
+
+    renderer = vtkRenderer()
+    renderWindow = vtkRenderWindow()
+
+    renderWindow.AddRenderer(renderer)
+    renderWindow.SetSize(640, 480)
+    renderWindow.SetWindowName('ExtractPolyLinesFromPolyData')
+
+    interactor = vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(renderWindow)
+
+    # Add the actors to the renderer.
+    renderer.AddActor(isoActor)
+    renderer.AddActor(outlineActor)
+    renderer.AddActor(lines)
+    renderer.SetBackground(backgroundColor)
+    # 经度纬度
+    renderer.GetActiveCamera().Azimuth(-45)
+    renderer.GetActiveCamera().Elevation(-22.5)
+    renderer.ResetCamera()
+
+    # This starts the event loop and as a side effect causes an
+    # initial render.
+    renderWindow.Render()
+    interactor.Initialize()
+    interactor.Start()
+
+    # Extract the lines from the polydata.
+    numberOfLines = cutter.GetOutput().GetNumberOfLines()
+
+    print('-----------Lines without using vtkStripper')
+    print('There are {0} lines in the polydata'.format(numberOfLines))
+
+    numberOfLines = iso.GetOutput().GetNumberOfLines()
+    points = iso.GetOutput().GetPoints()
+    cells = iso.GetOutput().GetLines()
+    cells.InitTraversal()
+
+    print('-----------Lines using vtkStripper')
+    print('There are {0} lines in the polydata'.format(numberOfLines))
+
+    indices = vtkIdList()
+    lineCount = 0
+
+    while cells.GetNextCell(indices):
+        print('Line {0}:'.format(lineCount))
+        for i in range(indices.GetNumberOfIds()):
+            point = points.GetPoint(indices.GetId(i))
+            print('\t({0:0.6f} ,{1:0.6f}, {2:0.6f})'.format(point[0], point[1], point[2]))
+        lineCount += 1
 
 
-# bounds
-bounds = [0,0,0,0,0,0]
-bounds = reader.GetOutput().GetBounds(bounds)
-
-# create a plane to cut,here it cuts in the XZ direction (xz normal=(1,0,0);XY =(0,0,1),YZ =(0,1,0)
-plane = vtkPlane()
-plane.SetOrigin(10, 0, 100)
-# 根据matrix 计算法向量
-M = np.array([ [-0.2080068212629158,	 0.5134529000437192,	 0.8325258444906033],
-      [-0.35252130345789634,	 0.7545900135604813,	 -0.55346421929799],
-      [-0.9123934967526036,	 -0.40860742880115053,	 0.024043215510192506]])
-M.T
-# plane.SetNormal(0.8325258444906033, -0.24993655260345934, -0.49440109013624367)
-plane.SetNormal(0, 0, 1)
-
-# 三维空间中渲染对象最常用的 vtkProp 子类是 vtkActor(表达场景中的几何数据)和 vtkVolume(表达场景中的体数据)
-"""vtkProp子类负责确定渲染场景中对象的位置、大小和方向信息。
-Prop依赖于两个对象(Prop一词来源于戏剧里的“道具”，在VTK里表示的是渲染场景中可以看得到的对象。)
-一个是Mapper(vtkMapper)对象，负责存放数据和渲染信息，另一个是属性(vtkProperty)对象，负责控制颜色、不透明度等参数。
-"""
-# create cutter
-cutter = vtkCutter()
-cutter.SetCutFunction(plane)
-# cutter->GenerateValues(numberOfCuts, .99, .99 * high);
-cutter.SetInputConnection(reader.GetOutputPort())
-cutter.Update()
-cutterMapper = vtkPolyDataMapper()
-cutterMapper.SetInputConnection(cutter.GetOutputPort())
-
-# create plane actor
-planeActor = vtk.vtkActor()
-planeActor.GetProperty().SetColor(0,1,1)
-planeActor.GetProperty().SetLineWidth(2)
-planeActor.GetProperty().SetAmbient(1.0)
-planeActor.GetProperty().SetDiffuse(0.0)
-planeActor.SetMapper(cutterMapper)
-
-colorTable = vtk.vtkLookupTable()
-
-# create modelActor
-modelMapper = vtk.vtkPolyDataMapper()
-modelMapper.SetInputConnection(reader.GetOutputPort())
-
-modelActor = vtkActor()
-modelActor.GetProperty().SetColor(0,1,0 )
-# modelActor.GetProperty().SetOpacity(0.5)
-modelActor.SetMapper(modelMapper)
-
-# contourFilter = vtk.vtkContourFilter()
-# contourFilter.SetValue(0, 100)
-# contourFilter.GenerateValues(1, 0, 500)
-# contourFilter.Update()
-
-# contourMapper = vtk.vtkPolyDataMapper()
-# contourMapper.SetInputConnection(contourFilter.GetOutputPort())
-
-# contourActor = vtkActor()
-# contourActor.GetProperty().SetColor(1.0,1.0,0.0)
-# contourActor.GetProperty().SetOpacity(0.5)
-# contourActor.SetMapper(contourMapper)
-
-# create renderers and add actors of plane and cube
-ren = vtk.vtkRenderer()
-ren.AddActor(planeActor)
-ren.AddActor(modelActor)
-# ren.AddActor(contourActor)
-ren.SetBackground(255,255,255)
-
-# Add renderer to renderwindow and render
-renWin = vtkRenderWindow()
-renWin.AddRenderer(ren)
-renWin.SetSize(600, 600)
-renWin.SetWindowName('Cutter')
-renWin.Render()
-
-iren = vtkRenderWindowInteractor()
-iren.SetRenderWindow(renWin)
-
-camera = ren.GetActiveCamera()
-# camera.SetPosition(-37.2611, -86.2155, 44.841)
-# camera.SetFocalPoint(0.569422, -1.65124, -2.49482)
-# camera.SetViewUp(0.160129, 0.42663, 0.890138)
-# camera.SetDistance(10)
-# camera.SetClippingRange(55.2019, 165.753)
-camera.SetPosition(0, -1, 0)
-camera.SetFocalPoint(0, 0, 0)
-camera.SetViewUp(0, 0, 1)
-# camera.SetDistance(10)
-# camera.SetClippingRange(55.2019, 165.753)
-ren.ResetCamera()
-renWin.Render()
-
-iren.Start()
-renWin.Finalize()
-iren.TerminateApp()
+if __name__ == '__main__':
+    main()

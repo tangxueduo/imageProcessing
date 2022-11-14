@@ -67,7 +67,7 @@ def find_2d_contours(slice_arr, label):
         # 画 bbox
         # img = cv.drawContours(binary_arr, [box], 0, (255), 1)
         # 画 contour
-        img = cv.drawContours(slice_arr, [contour], 0, (255), 1)
+        img = cv.drawContours(binary_arr, [contour], 0, (255), 1)
         cnts.append(contour)
         bboxes.append(box)
 

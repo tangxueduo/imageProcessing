@@ -15,7 +15,7 @@ dcm_img_grey = rescaler.Execute(dcm_img_hu)
 
 # 缩减维度，三维图像变成二维，也可用sitk.sequeeze()
 dcm_img_3d = sitk.GetArrayFromImage(dcm_img_grey)
-dcm_img_2d = dcm_img_3d[0, :, :]
+dcm_img_2d = dcm_img_3d[7, :, :]
 
 # 灰度图片变成伪彩色
 color_img = cv2.applyColorMap(dcm_img_2d, cv2.COLORMAP_JET)  # 自己测试turbo

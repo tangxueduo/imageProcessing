@@ -2,9 +2,10 @@
 # https://blog.csdn.net/liushao1031177/article/details/124847587
 import numpy as np
 import SimpleITK as sitk
-import vtkmodules.all as vtk
+import pydicom
+# import vtkmodules.all as vtk
 import json
-from vtkmodules.util.vtkImageExportToArray import vtkImageExportToArray
+# from vtkmodules.util.vtkImageExportToArray import vtkImageExportToArray
 
 """ 补充正交mpr 矩阵切片 """
 
@@ -56,7 +57,7 @@ def get_mpr_total(series_iuid: str, position: int) -> int:
         position: 1,2,3(轴冠失)
     """
     # 根据series_iuid 读取nii
-    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113619.2.416.77348009424380358976506205963520437809.nii.gz"
+    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113704.1.111.15016.1562149464.30.nii.gz"
     img = sitk.ReadImage(nii_path)
     img_arr = img.GetArrayFromImage(img)
     width, hight, depth = img_arr.shape()
@@ -145,7 +146,9 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     """ 根据方位和层面返回正交 mpr 和 层面的contour, bbox """
     res = {}
     # 读取 nii
-    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113619.2.416.77348009424380358976506205963520437809.nii.gz"
+    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113704.1.111.15016.1562149464.30.nii.gz"
+    dicom_file = "/media/tx-deepocean/Data/DICOMS/demos/1.2.840.113704.1.111.15016.1562149464.30/1.2.840.113704.1.111.4056.1562150522.187334"
+    ds = pydicom.read_file(dicom_file, force=True)
     img = sitk.ReadImage(nii_path)
     img_arr = sitk.GetArrayFromImage(img)
     print(img_arr.shape)
@@ -166,23 +169,47 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     if positon == 1:
         slice_arr = img_arr[slice_idx-1,:,:]
     elif positon == 2:
-        slice_arr = np.flipud(img_arr[:,slice_idx-1,:]) #上下反转
+        slice_arr = img_arr[:,slice_idx-1,:]
+        # slice_arr = np.flipud(img_arr[:,slice_idx-1,:]) #上下反转
     elif position == 3:
         slice_arr = np.flipud(img_arr[:,:,slice_idx-1]) # 上下反转
     else:
         raise "positon not found"
     # TODO  pixel_array 落盘mpr
+    print(slice_arr.shape)
+    slice_arr = slice_arr.astype(np.int16)
+    save_path = f"./mpr.dcm"
+
+    np_array_to_dcm(ds, save_path, slice_arr)
     contour_res = find_contours(matrix_res, slice_idx, position)
-    save_path = f"/tmp/mpr.dcm"
+
     res["dcm_path"] = save_path
     res["contours"] = contour_res
     # save_path 返回
     return res
 
+def np_array_to_dcm(ds, save_path, np_array):
+    ds.WindowCenter = 50
+    ds.WindowWidth = 200
+    ds.Rows = np_array.shape[0]
+    ds.Columns = np_array.shape[1]
+    ds.RescaleIntercept = 0
+    ds.RescaleSlope = 1
+    ds.BitsAllocated = 16
+    ds.BitsStored = 16
+    ds.HighBit = 15
+    ds.PixelRepresentation = 1
+    ds.SamplesPerPixel = 1
+    # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing,
+
+    ds.PixelData = np_array.tobytes()
+    ds.is_implicit_VR = True
+    ds.save_as(save_path)
+
 if __name__ == '__main__':
     series_iuid = "1.3.46.670589.33.1.63792961161330624600001.5231325296116986594"
-    position = 1
-    slice_idx = 20
+    position = 2
+    slice_idx = 120
     res = get_mpr(series_iuid=series_iuid, positon=position, slice_idx=slice_idx)
     print(json.dumps(res))
 

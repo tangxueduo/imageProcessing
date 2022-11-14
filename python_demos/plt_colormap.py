@@ -34,7 +34,7 @@ def np_array_to_dcm(ds, color_array, save_path, is_rgb=False, instance_number=20
 
 def process_data():
     # 读取nii
-    mask_file = "/media/tx-deepocean/Data/DICOMS/demos/output_new_data_2d/1.3.46.670589.33.1.63790032426654424200002.5278662375047719733/TTP.nii.gz"
+    mask_file = "/media/tx-deepocean/Data/DICOMS/demos/29/TTP.nii.gz"
     mask_img = sitk.ReadImage(mask_file, sitk.sitkUInt8)
 
     # 读取dicom
@@ -42,15 +42,15 @@ def process_data():
     dcm_img_hu = sitk.ReadImage(dcm_file)
 
     # 将hu值图像rescale到0-255的范围
-    rescaler = sitk.RescaleIntensityImageFilter()
-    rescaler.SetOutputMaximum(255)
-    rescaler.SetOutputMinimum(0)
-    dcm_img_grey = rescaler.Execute(mask_img)
+    # rescaler = sitk.RescaleIntensityImageFilter()
+    # rescaler.SetOutputMaximum(255)
+    # rescaler.SetOutputMinimum(0)
+    # dcm_img_grey = rescaler.Execute(mask_img)
 
     # 遍历生成伪彩图
     mask_array = sitk.GetArrayFromImage(mask_img)
     for dcm_slice in range(mask_array.shape[0]):
-        if dcm_slice == 0:
+        if dcm_slice == 7:
             dcm_2d_array = mask_array[dcm_slice, :, :]
             # TODO: color_array = get_color_map(dcm_img_2d)
 
@@ -92,8 +92,9 @@ def main():
     color_array = get_color_map(dcm_img_2d)
     # opencv 需要将BGR转RGB
     color_array = color_array[:, :, ::-1]
+    cv2.imwrite("./colormap.png", color_array)
     # 存为dicom
-    np_array_to_dcm(ds, color_array, "./colormap.dcm", is_rgb=True)
+    # np_array_to_dcm(ds, color_array, "./colormap.dcm", is_rgb=True)
 
 
 if __name__ == "__main__":

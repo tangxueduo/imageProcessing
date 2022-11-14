@@ -8,14 +8,14 @@ import numba as nb
 import numpy as np
 import pydicom
 import SimpleITK as sitk
-from constans import BRAIN_AREA_MAP
+from constants import BRAIN_AREA_MAP
 from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 
 # import pandas as pd
 
 
-mask_path = "/media/tx-deepocean/Data/DICOMS/demos/28"
+mask_path = "/media/tx-deepocean/Data/DICOMS/demos/29"
 dcm_file = "/media/tx-deepocean/Data/DICOMS/demos/TMAX/TMAX023.dcm"
 ds = pydicom.read_file(dcm_file, force=True)
 
@@ -148,51 +148,51 @@ def get_images(image_type: str, mask_array: np.ndarray):
     """
     # t0 = time.time()
     result = {}
-    # if image_type in ["CBV", "CBF", "MTT", "TTP", "TMAX"]:
-    #     # pass
-    #     # 确定 pixel value 上限 下限
-    #     # mask_array = mask_array.astype(np.int16)
+    if image_type in ["CBV", "CBF", "MTT", "TTP", "TMAX"]:
+        # pass
+        # 确定 pixel value 上限 下限
+        # mask_array = mask_array.astype(np.int16)
 
-    #     mask_array = np.clip(
-    #         mask_array,
-    #         mask_info_map[image_type]["min_pixel"],
-    #         mask_info_map[image_type]["max_pixel"],
-    #     )
-    #     # 归一化 y=(x-MinValue)/(MaxValue-MinValue)
-    #     mask_array = (mask_array - mask_array.min()) / (
-    #         mask_array.max() - mask_array.min()
-    #     )
+        mask_array = np.clip(
+            mask_array,
+            mask_info_map[image_type]["min_pixel"],
+            mask_info_map[image_type]["max_pixel"],
+        )
+        # ------归一化 y=(x-MinValue)/(MaxValue-MinValue)
+        mask_array = (mask_array - mask_array.min()) / (
+            mask_array.max() - mask_array.min()
+        )
+        # 这个 thresholds 是限制你某个区间段的
+        thresholds = np.percentile(
+            (np.unique(mask_array)), mask_info_map[image_type]["thresholds"]
+        ).tolist()
 
-    #     thresholds = np.percentile(
-    #         (np.unique(mask_array)), mask_info_map[image_type]["thresholds"]
-    #     ).tolist()
+        # ------ 这个 rgb_list 就是你的0到1 的rgb 值
+        cbv_rgb_list = mask_info_map[image_type]["rgb_list"]
+        # rgb 值归一
+        for level, rgb_value_list in enumerate(cbv_rgb_list):
+            cbv_rgb_list[level] = [i / 255 for i in rgb_value_list]
 
-    #     cbv_rgb_list = mask_info_map[image_type]["rgb_list"]
-
-    #     for level, rgb_value_list in enumerate(cbv_rgb_list):
-    #         cbv_rgb_list[level] = [i / 255 for i in rgb_value_list]
-    #     # print(cbv_rgb_list)
-
-    #     my_cmap = LinearSegmentedColormap.from_list(
-    #         "my_cmap", list(zip(thresholds, cbv_rgb_list))
-    #     )
-    #     index = 0
-    #     print(len(mask_array))
-
-    #     for dcm_slice in range(len(mask_array)):
-    #         if dcm_slice == 0:
-    #             dcm_2d_array = mask_array[dcm_slice, :, :]
-    #             plt.figure(figsize=(5.12, 5.12), facecolor="#000000")
-    #             plt.axis("off")
-    #             im = plt.imshow(np.where(dcm_2d_array==0, -1, dcm_2d_array), cmap=plt.get_cmap(my_cmap))
-    #             # 显示色读条
-    #             plt.colorbar(im)
-    #             plt.savefig("./model_map.jpg")
-    #             with io.BytesIO() as buffer:
-    #                 plt.savefig(buffer, format="jpg")
-    #                 buffer.seek(0)
-    #                 image = Image.open(buffer)
-    #                 ar = np.array(image)
+        my_cmap = LinearSegmentedColormap.from_list(
+            "my_cmap", list(zip(thresholds, cbv_rgb_list))
+        )
+        index = 0
+        print(len(mask_array))
+        # ------ mask_array 是模型给你的mask， 不过你这次我感觉不需要染色，貌似就是crop paste.....
+        for dcm_slice in range(len(mask_array)):
+            if dcm_slice == 10:
+                dcm_2d_array = mask_array[dcm_slice, :, :]
+                plt.figure(figsize=(5.12, 5.12), facecolor="#000000")
+                plt.axis("off")
+                im = plt.imshow(np.where(dcm_2d_array==0, -1, dcm_2d_array), cmap=plt.get_cmap(my_cmap))
+                # 显示色读条
+                plt.colorbar(im)
+                plt.savefig("./model_map.jpg")
+                with io.BytesIO() as buffer:
+                    plt.savefig(buffer, format="jpg")
+                    buffer.seek(0)
+                    image = Image.open(buffer)
+                    ar = np.array(image)
     # np_array_to_dcm(
     #     ds,
     #     ar.astype(np.uint8),
@@ -203,56 +203,32 @@ def get_images(image_type: str, mask_array: np.ndarray):
     # )
     # index += 1
     # print(time.time() - t0)
+    # ----------以下不用看了
     # tMIP 和 tAverage 需要更改 array dtype
     index = 1111
-    if (
-        image_type == "tAve_NO_SKULL"
-        or image_type == "tAve_WITH_SKULL"
-        or image_type == "TMIP_NO_SKULL"
-        or image_type == "MTT"
-    ):
-        # TODO: cbv 时注释这行
-        mask_array = mask_array.astype(np.int16)
-        for dcm_slice in range(mask_array.shape[0]):
-            # 发布时删除下面 if
-            # if dcm_slice == 12:
-            dcm_2d_array = mask_array[dcm_slice, :, :]
-            ww = mask_info_map[image_type]["ww"]
-            wl = mask_info_map[image_type]["wl"]
-            np_array_to_dcm(
-                ds,
-                dcm_2d_array,
-                f"./img_cp/test{str(index)}.dcm",
-                ww=ww,
-                wl=wl,
-            )
-            index += 1
+    # if (
+    #     image_type == "tAve_NO_SKULL"
+    #     or image_type == "tAve_WITH_SKULL"
+    #     or image_type == "TMIP_NO_SKULL"
+    #     or image_type == "MTT"
+    # ):
+    #     # TODO: cbv 时注释这行
+    #     mask_array = mask_array.astype(np.int16)
+    #     for dcm_slice in range(mask_array.shape[0]):
+    #         # 发布时删除下面 if
+    #         # if dcm_slice == 12:
+    #         dcm_2d_array = mask_array[dcm_slice, :, :]
+    #         ww = mask_info_map[image_type]["ww"]
+    #         wl = mask_info_map[image_type]["wl"]
+    #         np_array_to_dcm(
+    #             ds,
+    #             dcm_2d_array,
+    #             f"./img_cp/test{str(index)}.dcm",
+    #             ww=ww,
+    #             wl=wl,
+    #         )
+    #         index += 1
     return result
-
-
-def gray2rgb_array(
-    gray_array,
-):
-    temp_array = gray_array
-    max_pt = np.max(temp_array)
-    min_pt = np.min(temp_array)
-    window_width = 100
-    window_level = 50
-    true_max_pt = window_level + (window_width / 2)
-    true_min_pt = window_level - (window_width / 2)
-
-    scale = 255 / (true_max_pt - true_min_pt)
-    # 矩阵计算请尽量用numpy自己的库函数
-    temp_array = np.clip(temp_array, true_min_pt, true_max_pt)
-    min_pt_array = np.ones((temp_array.shape[0], temp_array.shape[1])) * true_min_pt
-    temp_array = (temp_array - min_pt_array) * scale
-
-    rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1], 3))
-    rgb_array[:, :, 0] = temp_array
-    rgb_array[:, :, 1] = temp_array
-    rgb_array[:, :, 2] = temp_array
-
-    return rgb_array
 
 
 def np_array_to_dcm(
@@ -290,7 +266,7 @@ def np_array_to_dcm(
 
 
 def main():
-    sitk_img = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/28/MTT.nii.gz")
+    sitk_img = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/29/MTT.nii.gz")
     mask_array = sitk.GetArrayFromImage(sitk_img)
     image_result = get_images("MTT", mask_array)
 
