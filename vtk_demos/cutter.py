@@ -9,6 +9,7 @@ import vtkmodules.vtkRenderingOpenGL2
 from vtkmodules.vtkCommonColor import vtkNamedColors
 from vtkmodules.vtkCommonCore import vtkIdList
 from vtkmodules.vtkCommonDataModel import vtkPlane
+from vtk.util.numpy_support import numpy_to_vtk, vtk_to_numpy
 from vtkmodules.vtkFiltersCore import (
     vtkCutter,
     vtkStripper
@@ -21,6 +22,7 @@ from vtkmodules.vtkRenderingCore import (
     vtkRenderWindowInteractor,
     vtkRenderer
 )
+import time
 import SimpleITK as sitk
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
 from vtkmodules.vtkFiltersCore import vtkContourFilter
@@ -59,27 +61,14 @@ def main():
     cutter = vtkCutter()
     cutter.SetInputConnection(reader.GetOutputPort())
     cutter.SetCutFunction(plane)
-    #  切割10个， 从-0.5位置开始，
+    #  切割10个， 从 -0.5 位置开始，
     cutter.GenerateValues(10, -0.5, 0.5)
-
-    # stripper 获取三角片
-    stripper = vtkStripper()
-    stripper.SetInputConnection(cutter.GetOutputPort())
-    stripper.JoinContiguousSegmentsOn()
-
-    # 将三角片映射为几何数据
-    linesMapper = vtkPolyDataMapper()
-    linesMapper.SetInputConnection(stripper.GetOutputPort())
-
-    lines = vtkActor()
-    lines.SetMapper(linesMapper)
-    lines.GetProperty().SetDiffuseColor(lineColor)
-    lines.GetProperty().SetLineWidth(3.)
 
     # 提取contour， 渲染管线filter -> mapper -> actor 
     iso = vtkContourFilter()
     iso.SetInputConnection(cutter.GetOutputPort())
-    iso.GenerateValues(12, -100, 1150)
+    iso.GenerateValues(2, -0.5, 0.5)
+    iso.Update()
 
     isoMapper = vtkPolyDataMapper()
     isoMapper.SetInputConnection(iso.GetOutputPort())
@@ -89,16 +78,29 @@ def main():
     isoActor.SetMapper(isoMapper)
     isoActor.GetProperty().SetColor(colors.GetColor3d('yellow'))
     
+    # stripper 获取三角片
+    stripper = vtkStripper()
+    stripper.SetInputConnection(iso.GetOutputPort())
+    stripper.JoinContiguousSegmentsOn()
+    stripper.Update()
 
-    outline = vtkOutlineFilter()
-    outline.SetInputConnection(cutter.GetOutputPort())
+    # 将三角片映射为几何数据
+    linesMapper = vtkPolyDataMapper()
+    linesMapper.SetInputConnection(stripper.GetOutputPort())
 
-    outlineMapper = vtkPolyDataMapper()
-    outlineMapper.SetInputConnection(outline.GetOutputPort())
+    lines = vtkActor()
+    lines.SetMapper(linesMapper)
+    lines.GetProperty().SetDiffuseColor(lineColor)
+    lines.GetProperty().SetLineWidth(5.)
+    # outline = vtkOutlineFilter()
+    # outline.SetInputConnection(cutter.GetOutputPort())
 
-    outlineActor = vtkActor()
-    outlineActor.SetMapper(outlineMapper)
-    outlineActor.GetProperty().SetColor(colors.GetColor3d("blue"))
+    # outlineMapper = vtkPolyDataMapper()
+    # outlineMapper.SetInputConnection(outline.GetOutputPort())
+
+    # outlineActor = vtkActor()
+    # outlineActor.SetMapper(outlineMapper)
+    # outlineActor.GetProperty().SetColor(colors.GetColor3d("blue"))
 
     renderer = vtkRenderer()
     renderWindow = vtkRenderWindow()
@@ -112,7 +114,7 @@ def main():
 
     # Add the actors to the renderer.
     renderer.AddActor(isoActor)
-    renderer.AddActor(outlineActor)
+    # renderer.AddActor(outlineActor)
     renderer.AddActor(lines)
     renderer.SetBackground(backgroundColor)
     # 经度纬度
@@ -122,9 +124,7 @@ def main():
 
     # This starts the event loop and as a side effect causes an
     # initial render.
-    renderWindow.Render()
-    interactor.Initialize()
-    interactor.Start()
+
 
     # Extract the lines from the polydata.
     numberOfLines = cutter.GetOutput().GetNumberOfLines()
@@ -132,10 +132,14 @@ def main():
     print('-----------Lines without using vtkStripper')
     print('There are {0} lines in the polydata'.format(numberOfLines))
 
-    numberOfLines = iso.GetOutput().GetNumberOfLines()
-    points = iso.GetOutput().GetPoints()
-    cells = iso.GetOutput().GetLines()
-    cells.InitTraversal()
+    numberOfLines = stripper.GetOutput().GetNumberOfLines() # 获取该点的id作为标记点。此方法是根据点数量顺序排序序号Index获取，获取到这个cell中的指定序号Index的点的vtkId（个人认为）
+    points = stripper.GetOutput().GetPointData().GetScalars() # 等值线的点集
+    arr = vtk_to_numpy(points)
+
+    print(arr.shape, arr.min(), arr.max())
+    # cells = stripper.GetOutput().GetLines() # 等值线的线单元数组
+    # cells.InitTraversal()
+    # isolineScalars = stripper.GetOutput().GetPointData().GetScalars() # 等值线的点标量数组
 
     print('-----------Lines using vtkStripper')
     print('There are {0} lines in the polydata'.format(numberOfLines))
@@ -143,12 +147,15 @@ def main():
     indices = vtkIdList()
     lineCount = 0
 
-    while cells.GetNextCell(indices):
-        print('Line {0}:'.format(lineCount))
-        for i in range(indices.GetNumberOfIds()):
-            point = points.GetPoint(indices.GetId(i))
-            print('\t({0:0.6f} ,{1:0.6f}, {2:0.6f})'.format(point[0], point[1], point[2]))
-        lineCount += 1
+    # while cells.GetNextCell(indices):
+    #     # print('Line {0}:'.format(lineCount))
+    #     for i in range(indices.GetNumberOfIds()):
+    #         point = points.GetPoint(indices.GetId(i))
+    #         # print('\t({0:0.6f} ,{1:0.6f}, {2:0.6f})'.format(point[0], point[1], point[2]))
+    #     lineCount += 1
+    renderWindow.Render()
+    interactor.Initialize()
+    interactor.Start()
 
 
 if __name__ == '__main__':

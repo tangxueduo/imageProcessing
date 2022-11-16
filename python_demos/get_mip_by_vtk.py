@@ -86,7 +86,7 @@ def get_matrix(angle=90, axis="X") -> list:
 
 
 def get_total_by_matrix(
-    rebuild_spacing: float, slab_thickness: float, azimuth_type: int, matrix: list, img_shape: list
+    rebuild_spacing: float, slab_thickness: float, azimuth_type: str, matrix: list, img_shape: list, spacing: list, old_origin: list
 ):
     """根据matrix 方位， 返回重建后层数
     Args:
@@ -94,22 +94,21 @@ def get_total_by_matrix(
         azimuth_type: 1, 2, 3(轴冠矢)
     """
     total = 0
-    st_origin = [111, 222, 222]
+    M = np.array([[matrix[0], matrix[4], matrix[8]], [matrix[1], matrix[5], matrix[9]], [matrix[2], matrix[6], matrix[10]]])
     # TODO: 获取旋转后最后一张的左上角的原点
-    ed_origin = [origin[0], origin[1], st_origin[2]+img_shape[2]*spacing[2]]
-
-    rotate_st_origin = []
-    rotate_ed_origin = []
-    if azimuth_type == 1:
+    ed_origin = [old_origin[0]+img_shape[0]+spacing[0], old_origin[1]+img_shape[1]*spacing[1], old_origin[2]+ img_shape[2]*spacing[2]]
+    new_ed_origin = np.dot(ed_origin, M).tolist()
+    new_st_origin = np.dot(old_origin, M).tolist()
+    if azimuth_type == "axial":
         # TODO: 确认重建后的 spacing [0.5, 0.5, 0.5]
-        total = math.floor((origin[2] - slab_thickness - st_origin[2]) / slab_thickness)
+        total = math.floor((new_ed_origin[2] - slab_thickness - new_st_origin[2]) / rebuild_spacing)
         # 获取旋转后 origin 范围
-    elif azimuth_type == 2:
+    elif azimuth_type == "coronal":
         # 冠 Y
-        total = math.floor((origin[1] - slab_thickness - st_origin[1]) / slab_thickness)
-    elif azimuth_type == 3:
+        total = math.floor((new_ed_origin[1] - slab_thickness - new_st_origin[1]) / rebuild_spacing)
+    elif azimuth_type == "sagittal":
         # 失 X
-        total = math.floor((origin[0] - slab_thickness - st_origin[0]) / slab_thickness)
+        total = math.floor((new_ed_origin[0] - slab_thickness - new_st_origin[0]) / rebuild_spacing)
     else:
         raise "azimuth_type input error"
     return total
@@ -137,14 +136,15 @@ def get_mpr(
     img = sitk.ReadImage(nii_path)
     img_arr = sitk.GetArrayFromImage(img)  # (z,y,x)
     img_shape = img_arr.shape
+    print(img_shape)
 
     # 根据层厚 SliceThickness 层间距 计算 mip 各方位总层数, SpacingBetweenSlices
-    # total = get_total_by_matrix(matrix, extent)
+    # total = get_total_by_matrix(rebuild_spacing, slab_thickness, azimuth_type, matrix, img_shape, spacing, st_orgin, ed_origin)
     t0 = time.time()
     spacing = img.GetSpacing()
     st_origin = img.GetOrigin()
-    print(f"*****ImageOrientationPatient: {ds.ImageOrientationPatient}")
-
+    print(f'******st_origin： {st_origin}')
+    
     reader = vtk_image_from_array(img_arr, spacing, st_origin)
 
     # 获取物理信息
@@ -152,112 +152,119 @@ def get_mpr(
     print(f"extent: {extent}")  # (x, y, z)
 
     # TODO: 根据层厚 slab_thickness 层间距 原点，计算重建层数起止位置 done
-    # 轴状位
+    rotate_m = np.array([[matrix[0], matrix[4], matrix[8]], [matrix[1], matrix[5], matrix[9]], [matrix[2], matrix[6], matrix[10]]])
+    print(rotate_m)
+    # ROI 体心 ijk
+    ijk = [matrix[3], matrix[7], matrix[11]]
+
+    # 技术问题, 未找到旋转后spacing计算方法, 写死
+    rotate_spacing = [0.5, 0.5, 0.5]
+    ed_origin = [            
+        st_origin[0] + spacing[0] * img_shape[2],
+        st_origin[1] + spacing[1] * img_shape[1],
+        st_origin[2] + spacing[2] * img_shape[0],]
     if azimuth_type == 1:
-        matrix = [0.975808, 0, -0.218629, 37.5841,
-            0, -1, 0, -6.81277,
-            0.218629, 0, 0.975808, -104.264,
-            0, 0, 0, 1,
-        ]
-        rotate_m = [[0.975808, 0, 0.218629], [0, -1, 0], [-0.218629, 0, 0.975808]]
-        # 最后一张原点
-        ed_origin = [
-            st_origin[0],
-            st_origin[1],
-            st_origin[2] + spacing[2] * img_shape[2],
-        ]
+        # 最后一张左上点
+        # ed_origin = [
+        #     st_origin[0],
+        #     st_origin[1],
+        #     st_origin[2] + spacing[2] * img_shape[2],
+        # ]
+        print(f'******ed_origin: {ed_origin}')
+        physical_idx = ijk[2]
+        print(f'*****physical_idx: {physical_idx}')
 
+        # RAS_to_LPS 联调时注释下面代码
+        direction = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        rotate_m = np.dot(direction, rotate_m)
+        # 计算旋转前的 k_id
+        old_ijk = np.dot(ijk, np.linalg.inv(rotate_m))
+        k_idx = img.TransformPhysicalPointToIndex(old_ijk)[2]
+        print(f'**************k_idx: {k_idx}')
+        t1 = time.time()
+        contours, boxes = find_contours(img_arr, 100, azimuth_type, k_idx)
+        print(f'*****正交contour耗时: {time.time() - t1}')
         # 变换后的 总长度
-        rotate_st_origin = np.dot(st_origin, rotate_m)
-        rotate_ed_origin = np.dot(ed_origin, rotate_m)
-        # 总长度
-        # TODO： 计算 spacing， 搞清楚正负问题
-        rotate_spacing = [0.5450804732219816, 0.5585940000000003, 0.6098799768055843]
-        z_idx = math.floor((matrix[11] - rotate_st_origin[2]) / rotate_spacing[2])
-        print([z_idx * i for i in rotate_spacing])
-        # 获取center对应的中间层index
-        k_idx = (rotate_st_origin + [z_idx * i for i in rotate_spacing]).tolist()
+        rotate_st_origin = np.dot(st_origin, rotate_m).tolist()
+        rotate_ed_origin = np.dot(ed_origin, rotate_m).tolist()
+        # 暂时注释，和前端联调看下效果
+        # rotate_st_origin[0], rotate_st_origin[1] = st_origin[:2]
+        # rotate_ed_origin[0], rotate_ed_origin[1] = st_origin[:2]
+        print(f'********旋转后: {rotate_st_origin}, {rotate_ed_origin}')
 
-        # 获取中间层的 contour 信息, 若没有返回[]
-        rotate_st_origin = rotate_st_origin.tolist()
-        rotate_ed_origin = rotate_ed_origin.tolist()
+        # 根据 slab_thickness 和 physical_idx 获取 mip 区间
+        #  左面不够 0.5 * 重建厚度
+        left_bounding = [rotate_st_origin[0], rotate_st_origin[1], rotate_st_origin[2] + slab_thickness]
+        right_bounding = [rotate_st_origin[0], rotate_st_origin[1], rotate_ed_origin[2] - slab_thickness]
+        min_idx, max_idx = get_rebuild_range(rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=2)
 
-        print(rotate_st_origin, rotate_ed_origin)
-        # 根据 slab_thickness 和 k_idx 获取 mip 区间
-        # TODO: 封装成函数
-        if (k_idx[2] - 0.5 * slab_thickness) < rotate_st_origin[2]:
-            # TODO： 这样会导致，部分 mip 最后无变化
-            min_idx = ijk_to_xyz(
-                rotate_st_origin[2], rotate_st_origin[2], rotate_spacing[2]
-            )
-            max_idx = ijk_to_xyz(
-                rotate_st_origin[2] + slab_thickness,
-                rotate_st_origin[2],
-                rotate_spacing[2],
-            )
-        elif (k_idx[2] + 0.5 * slab_thickness) > rotate_ed_origin[2]:
-            max_idx = ijk_to_xyz(
-                rotate_ed_origin[2], rotate_st_origin[2], rotate_spacing[2]
-            )
-            min_idx = ijk_to_xyz(
-                rotate_ed_origin[2] - slab_thickness,
-                rotate_st_origin[2],
-                rotate_spacing[2],
-            )
-        else:
-            min_idx = ijk_to_xyz(
-                k_idx[2] - 0.5 * slab_thickness, rotate_st_origin[2], rotate_spacing[2]
-            )
-            max_idx = ijk_to_xyz(
-                k_idx[2] + 0.5 * slab_thickness, rotate_st_origin[2], rotate_spacing[2]
-            )
-        slice_nums = max_idx - min_idx
-        # 计算体数据中心点
-        center = []
-        center.append(st_origin[0] + spacing[0] * 0.5 * (extent[0] + extent[1]))  # 失
-        center.append(st_origin[1] + spacing[1] * 0.5 * (extent[2] + extent[3]))  # 冠
-        center.append(st_origin[2] + spacing[2] * 0.5 * (min_idx + max_idx))  # 轴
-        # reslice.SetOutputSpacing(spacing[0], spacing[1], rebuild_spacing) # 区分轴冠失
 
     elif azimuth_type == 2:
-        # 冠状位
-        matrix = [0.965339,-0.0903941,-0.244845,0.269552,
-            0.244845, 0.638547,0.729595, -6.46509,
-            0.0903941,-0.764256,0.638547,60.4262,
-            0,0,0,1,
-        ]
-        # 计算体数据中心点
-        center = []
-        center.append(origin[0] + spacing[0] * 0.5 * (extent[0] + extent[1]))  # 失
-        center.append(origin[1] + spacing[1] * 0.5 * (min_idx + max_idx))  # 冠
-        center.append(origin[2] + spacing[2] * 0.5 * (extent[4] + extent[5]))  # 轴
+        # 最后一张左上点
+        # ed_origin = [
+        #     st_origin[0],
+        #     st_origin[1] + spacing[1] * img_shape[1],
+        #     st_origin[2],
+        # ]
+        direction = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        rotate_m = np.dot(direction, rotate_m)
+        # 计算旋转前的 k_id
+        old_ijk = np.dot(ijk, np.linalg.inv(rotate_m))
+        k_idx = img.TransformPhysicalPointToIndex(old_ijk)[1]
+        t1 = time.time()
+        contours, boxes = find_contours(img_arr, 100, azimuth_type, k_idx)
+        # 变换后的 总长度
+        rotate_st_origin = np.dot(st_origin, rotate_m).tolist()
+        rotate_ed_origin = np.dot(ed_origin, rotate_m).tolist()
+        # rotate_st_origin[0], rotate_st_origin[2] = st_origin[0], st_origin[2] 
+        # rotate_ed_origin[0], rotate_ed_origin[2] = st_origin[0], st_origin[2]
+        print(f'********旋转后: {rotate_st_origin}, {rotate_ed_origin}')
+
+        physical_idx = ijk[1]
+        print(f'*****physical_idx: {physical_idx}')
+
+        left_bounding = [rotate_st_origin[0], rotate_st_origin[1] + slab_thickness, rotate_st_origin[2]]
+        right_bounding = [rotate_ed_origin[0], rotate_ed_origin[1] - slab_thickness, rotate_ed_origin[2]]
+        min_idx, max_idx = get_rebuild_range(rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=1)
     elif azimuth_type == 3:
-        pass
-        # 失状位
-        matrix = [-1, 0, 0, 0.279233, 0, 1, 0, -6.81277, 0, 0, 1, 60.401, 0, 0, 0, 1]
-        # 计算体数据中心点
-        center = []
-        center.append(origin[0] + spacing[0] * 0.5 * (min_idx + max_idx))  # 失
-        center.append(origin[1] + spacing[1] * 0.5 * (extent[2] + extent[3]))  # 冠
-        center.append(origin[2] + spacing[2] * 0.5 * (extent[4] + extent[5]))  # 轴
-        print(f"*****center:  {center}")
+        # 最后一张左上点
+        # ed_origin = [
+        #     st_origin[0] + spacing[0] * img_shape[0],
+        #     st_origin[1],
+        #     st_origin[2],
+        # ]
+        direction = np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]])
+        rotate_m = np.dot(direction, rotate_m)
+        # 计算旋转前的 k_id
+        old_ijk = np.dot(ijk, np.linalg.inv(rotate_m))
+        k_idx = img.TransformPhysicalPointToIndex(old_ijk)[0]
+        t1 = time.time()
+        contours, boxes = find_contours(img_arr, 100, azimuth_type, k_idx)
+        # 变换后的 总长度
+        rotate_st_origin = np.dot(st_origin, rotate_m).tolist()
+        rotate_ed_origin = np.dot(ed_origin, rotate_m).tolist()
+        # rotate_st_origin[1], rotate_st_origin[2] = st_origin[1:]
+        # rotate_ed_origin[1], rotate_ed_origin[2] = st_origin[1:]
+        print(f'********旋转后: {rotate_st_origin}, {rotate_ed_origin}')
+
+        physical_idx = ijk[0]
+        print(f'*****physical_idx: {physical_idx}')
+        left_bounding = [rotate_st_origin[0] + slab_thickness, rotate_st_origin[1], rotate_st_origin[2]]
+        right_bounding = [rotate_ed_origin[0] - slab_thickness, rotate_ed_origin[1], rotate_ed_origin[2]]
+        min_idx, max_idx = get_rebuild_range(rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=0)
     else:
         raise "azimuth_type input error"
+    slice_nums = max_idx - min_idx
     print(f"slice_nums: {slice_nums}， min_idx: {min_idx}, max_idx: {max_idx}")
-
+    
     resliceAxes = vtk.vtkMatrix4x4()
     resliceAxes.DeepCopy(matrix)
-    # TODO: 这个center影响最后出图，
-    resliceAxes.SetElement(0, 3, center[0])
-    resliceAxes.SetElement(1, 3, center[1])
-    resliceAxes.SetElement(2, 3, center[2])
-
-    # mip SetResliceAxesOrigin() 方法还可以用于提供切片将通过的(x，y，z)点。
     reslice = vtk.vtkImageSlabReslice()
+    # setspacing 对最后出图无影响..？
+    # reslice.SetOutputSpacing([spacing[0], spacing[1], rebuild_spacing])
     reslice.SetInputConnection(reader.GetOutputPort())  # 截取的体数据
     reslice.SetOutputDimensionality(2)  # 设置输出为2维图片
     reslice.SetInterpolationModeToLinear()  # 差值
-    # reslice.SetOutputSpacing()
 
     if rebuild_type == "MIP":
         reslice.SetBlendModeToMax()
@@ -267,51 +274,95 @@ def get_mpr(
         reslice.SetBlendModeToMean()
     reslice.SetSlabThickness(slice_nums)  # 设置厚度
     reslice.SetResliceAxes(resliceAxes)  # 设置矩阵
+    # 由SetBackgroundColor或SetBackgroundLevel控制的位于Volume外部的像素的默认值。
+    # SetResliceAxesOrigin()方法还可以用于提供切片将通过的(x，y，z)点。
+    reslice.SetBackgroundLevel(-9999)
     reslice.Update()
-
-    contour_res, boxes = find_contours(img_arr, label=100, position=1, idx=z_idx)
-    #TODO: 补充center_z, idx
     
     # 落盘
     vtk_img_export = vtkImageExportToArray()
     vtk_img_export.SetInputConnection(reslice.GetOutputPort())
+    print(reader.GetOutput().GetExtent())
     np_array = vtk_img_export.GetArray()
-    print(np.min(np_array), np_array.shape)
-    np_array[np_array == 0] = np.min(np_array)
+    # print(np.min(np_array), np_array.shape)
+
     np_array = np_array.astype(np.int16)
     save_path = "./mip.dcm"
-    np_array_to_dcm(ds, save_path, np_array)
-
-    # result = sitk.GetImageFromArray(np_array)
-    # result.SetMetaData("0028|1050", "40")
-    # result.SetMetaData("0028|1051", "400")
-    # # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing,
-    # sitk.WriteImage(result, "./test.dcm")
+    np_array_to_dcm(ds, save_path, np_array, azimuth_type, matrix, st_origin)
     res["dcm_path"] = f"/tmp/{rebuild_type}.dcm"
 
-    res["boxes"] = boxes
-    res["contour"] = contour_res
+    # res["boxes"] = boxes
+    # res["contour"] = contour_res
     # res["idx"] = idx
     print(f"a mip cost: {time.time() - t0}")
     return res
 
-
-def ijk_to_xyz(ijk, origin, spacing):
-    """物理坐标转像素坐标"""
-    if isinstance(ijk, float):
-        xyz = math.floor((ijk - origin) / spacing)
+def get_rebuild_range(rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding,right_bounding, physical_idx, slab_thickness, azimuth_idx=2):
+    """"""
+    if azimuth_idx == 2:
+        tmp1 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx - 0.5 * slab_thickness]
+        tmp2 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx + 0.5 * slab_thickness]
+    elif azimuth_idx == 1:
+        tmp1 = [rotate_st_origin[0], physical_idx - 0.5 * slab_thickness, rotate_st_origin[2]]
+        tmp2 = [rotate_st_origin[0], physical_idx + 0.5 * slab_thickness, rotate_st_origin[2]]
     else:
-        sub = np.sub(np.array(ijk), np.array(origin))
-        xyz = np.divide(sub, np.array(spacing))
-        xyz = np.int0(xyz).tolist()
+        tmp1 = [physical_idx - 0.5 * slab_thickness, rotate_st_origin[1], rotate_st_origin[2]]
+        tmp2 = [physical_idx + 0.5 * slab_thickness, rotate_st_origin[1], rotate_st_origin[2]]
+
+    if (physical_idx - 0.5 * slab_thickness) < rotate_st_origin[azimuth_idx]:
+        print(11111111111111)
+        min_idx = ijk_to_xyz(
+            rotate_st_origin, rotate_st_origin, rotate_spacing, rotate_m
+        )[2]
+        max_idx = ijk_to_xyz(
+            left_bounding,
+            rotate_st_origin,
+            rotate_spacing,
+            rotate_m
+        )[2]
+    # 右面不够 0.5 * 重建厚度
+    elif (physical_idx + 0.5 * slab_thickness) > rotate_ed_origin[azimuth_idx]:
+        print(2222222222222)
+        max_idx = ijk_to_xyz(
+            rotate_ed_origin, rotate_st_origin, rotate_spacing, rotate_m
+        )[2]
+        min_idx = ijk_to_xyz(
+            right_bounding,
+            rotate_st_origin,
+            rotate_spacing,
+            rotate_m
+        )[2]
+    else:
+        print(33333333333333)
+        print(f'tmp1, tmp2: {tmp1}, {tmp2}')
+        min_idx = ijk_to_xyz(
+            tmp1, rotate_st_origin, rotate_spacing, rotate_m
+        )[2]
+        max_idx = ijk_to_xyz(
+            tmp2, rotate_st_origin, rotate_spacing, rotate_m
+        )[2]
+    return min_idx, max_idx
+
+def ijk_to_xyz(point_ijk, origin, spacing, direction):
+    """物理坐标转像素坐标"""
+    # index = inv(direction * spacing) * (point_ijk - origin)
+    # index = (P-O)/D*S
+    spacing = np.diag(spacing)
+    tmp = np.abs(np.dot(np.linalg.inv(np.dot(direction, spacing)), np.abs(np.subtract(point_ijk, origin))))
+    xyz = np.int0(tmp)
+    print(xyz)
     return xyz
 
 
-def np_array_to_dcm(ds, save_path, np_array):
-    print(np_array.shape)
+def np_array_to_dcm(ds: pydicom.FileDataset, save_path:str, np_array:np.ndarray, azimuth_type: str, matrix: list, old_origin: list):
+    """根据重建信息重新计算各个方位的tag
+    Args:
+        old_origin: 原体数据的第一张左上点 [-xx, -xxx, -xxx]
+    """
     ds.WindowCenter = 40
     ds.WindowWidth = 400
-    ds.Rows = np_array.shape[2]
+    # np_array 需要更改这个 shape
+    ds.Rows = np_array.shape[1]
     ds.Columns = np_array.shape[2]
     ds.RescaleIntercept = 0
     ds.RescaleSlope = 1
@@ -320,8 +371,22 @@ def np_array_to_dcm(ds, save_path, np_array):
     ds.HighBit = 15
     ds.PixelRepresentation = 1
     ds.SamplesPerPixel = 1
-    # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing,
+    # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing
+    if azimuth_type == 1:
+        ds.SliceLocation = matrix[11]
+        ds.ImagePositionPatient = [old_origin[0], old_origin[1], matrix[11]]
+        ds.ImageOrientationPatient = [matrix[0], matrix[4], matrix[8], matrix[1], matrix[5], matrix[9]]
+    if azimuth_type == 2:
+        ds.SliceLocation = matrix[7]
+        ds.ImagePositionPatient = [old_origin[0], matrix[7], old_origin[2]]
+        ds.ImageOrientationPatient = [matrix[0], matrix[4], matrix[8], matrix[2], matrix[6], matrix[10]]
+    if azimuth_type == 3:
+        # x 为失状轴
+        ds.SliceLocation = matrix[3]
+        ds.ImagePositionPatient = [matrix[3], old_origin[1], old_origin[2]]
+        ds.ImageOrientationPatient = [matrix[1], matrix[5], matrix[9], matrix[2], matrix[6], matrix[10]]
 
+    ds.PixelSpacing = [0.5, 0.5, 0.5]
     ds.PixelData = np_array.tobytes()
     ds.is_implicit_VR = True
     ds.save_as(save_path)
@@ -367,6 +432,7 @@ def find_2d_contours(slice_arr, label):
     contours, hier = cv2.findContours(
         binary_arr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
     )
+    
     print(f"contour 个数: {len(contours)}")
     if len(contours) == 0:
         return cnts, bboxes
@@ -388,27 +454,27 @@ def find_2d_contours(slice_arr, label):
 
 def main():
     series_path = "/media/tx-deepocean/Data/DICOMS/ct_cerebral/CN010023-1510071117/1.3.46.670589.33.1.63780596181185791300001.5349461926886765269/1.3.46.670589.33.1.63780596345132168500001.4829782583723493361"
-    slab_thickness = 10
+    slab_thickness = 0.5
     scale = 1
     # TODO: 层厚小于 1mm 情况前端控制？
-    matrix = [
-        -0.977967,
-        -0.0432743,
-        -0.204225,
-        0.757874,
-        -0.204864,
-        0.0108364,
-        0.978731,
-        -142.976,
-        -0.0401408,
-        0.999004,
-        -0.019463,
-        11.8231,
-        0,
-        0,
-        0,
-        1,
-    ]
+    # 确保matrix 坐标系正确
+    matrix =[
+        -0.88373, 0, -0.467998, -70.5794,
+        0, 1, 0, -6.81277,
+        -0.467998, 0, 0.88373, 194.274,
+        0, 0, 0, 1 
+        ]
+    # matrix = [
+    #     -1, 0, 0, 0.279233,
+    #     0, 0, 1, -6.53347,
+    #     0, 1, 0, 60.401,
+    #     0, 0, 0, 1 
+    # ]
+    # matrix = [
+    #     0, -0.467998, -0.88373, -6.4e-05,
+    #     -1, 0, 0, -6.81277,
+    #     0, 0.88373, -0.467998, 60.401,
+    #     0, 0, 0, 1]
     res = get_mpr(
         slab_thickness,
         slab_thickness * scale,
