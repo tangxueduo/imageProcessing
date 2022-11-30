@@ -219,3 +219,29 @@ def np_array_to_dcm(
     ds.RescaleIntercept = 0
     ds.PixelData = np_array.tobytes()
     ds.save_as(save_path)
+
+def judge_average_all(
+    report: dict,
+    area: str,
+    cbf_v: str,
+    cbv_v: str,
+    mtt_v: str,
+    ttp_v: str,
+    tmax_v: str,
+    core_penumbra: float,
+    low_perfusion: float,
+) -> dict:
+    if len(set([cbf_v, cbv_v, mtt_v, ttp_v, tmax_v])) == 1 or (
+        core_penumbra == 0 and low_perfusion == 0
+    ):
+        return report
+    else:
+        report[area] = {}
+        report[area]["CBF"] = cbf_v
+        report[area]["CBV"] = cbv_v
+        report[area]["MTT"] = mtt_v
+        report[area]["TTP"] = ttp_v
+        report[area]["Tmax"] = tmax_v
+        report[area]["corePenumbra"] = core_penumbra
+        report[area]["lowPerfusion"] = low_perfusion
+    return report

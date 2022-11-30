@@ -57,7 +57,7 @@ def get_mpr_total(series_iuid: str, position: int) -> int:
         position: 1,2,3(轴冠失)
     """
     # 根据series_iuid 读取nii
-    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113704.1.111.15016.1562149464.30.nii.gz"
+    nii_path = "/media/tx-deepocean/Data/DICOMS/demos/1.3.12.2.1107.5.1.4.73124.30000018012823445126400002112.nii.gz"
     img = sitk.ReadImage(nii_path)
     img_arr = img.GetArrayFromImage(img)
     width, hight, depth = img_arr.shape()
@@ -146,10 +146,12 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     """ 根据方位和层面返回正交 mpr 和 层面的contour, bbox """
     res = {}
     # 读取 nii
-    nii_path = "/media/tx-deepocean/Data/DICOMS/RESULT/volume/1.2.840.113704.1.111.15016.1562149464.30.nii.gz"
+    nii_path = "/media/tx-deepocean/Data/DICOMS/demos/1.3.12.2.1107.5.1.4.73124.30000018012823445126400002112.nii.gz"
     dicom_file = "/media/tx-deepocean/Data/DICOMS/demos/1.2.840.113704.1.111.15016.1562149464.30/1.2.840.113704.1.111.4056.1562150522.187334"
     ds = pydicom.read_file(dicom_file, force=True)
     img = sitk.ReadImage(nii_path)
+    spacing = img.GetSpacing()
+    print(f'****spacing:{spacing}')
     img_arr = sitk.GetArrayFromImage(img)
     print(img_arr.shape)
     width, hight, depth = img_arr.shape[2], img_arr.shape[1], img_arr.shape[0]
@@ -168,11 +170,16 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     # 出图, contour, bbox
     if positon == 1:
         slice_arr = img_arr[slice_idx-1,:,:]
+        pixel_spacing = [spacing[0], spacing[1]] # 轴
+
     elif positon == 2:
         slice_arr = img_arr[:,slice_idx-1,:]
+        print(slice_arr.shape)
         # slice_arr = np.flipud(img_arr[:,slice_idx-1,:]) #上下反转
+        pixel_spacing = [spacing[2], spacing[1]]  # 冠
     elif position == 3:
         slice_arr = np.flipud(img_arr[:,:,slice_idx-1]) # 上下反转
+        pixel_spacing = [spacing[2], spacing[0]] # 矢
     else:
         raise "positon not found"
     # TODO  pixel_array 落盘mpr
@@ -180,7 +187,7 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     slice_arr = slice_arr.astype(np.int16)
     save_path = f"./mpr.dcm"
 
-    np_array_to_dcm(ds, save_path, slice_arr)
+    np_array_to_dcm(ds, save_path, slice_arr, pixel_spacing, spacing)
     contour_res = find_contours(matrix_res, slice_idx, position)
 
     res["dcm_path"] = save_path
@@ -188,9 +195,9 @@ def get_mpr(series_iuid: str, positon: int, slice_idx: int) -> dict:
     # save_path 返回
     return res
 
-def np_array_to_dcm(ds, save_path, np_array):
-    ds.WindowCenter = 50
-    ds.WindowWidth = 200
+def np_array_to_dcm(ds, save_path, np_array, pixel_spacing,spacing):
+    ds.WindowCenter = -600
+    ds.WindowWidth = 1600
     ds.Rows = np_array.shape[0]
     ds.Columns = np_array.shape[1]
     ds.RescaleIntercept = 0
@@ -200,16 +207,20 @@ def np_array_to_dcm(ds, save_path, np_array):
     ds.HighBit = 15
     ds.PixelRepresentation = 1
     ds.SamplesPerPixel = 1
+    ds.PixelSpacing = pixel_spacing
+    ds.SpacingBetweenSlices = spacing[0]
+    ds.SliceThickness = spacing[0]
+    ds.ImageOrientationPatient = [0,0,1,0,1,0]
     # TODO: 重新计算 ImagePositionPatient, orientation, slicelocation, PixelSpacing,
-
     ds.PixelData = np_array.tobytes()
-    ds.is_implicit_VR = True
+    # ds.is_implicit_VR = True
     ds.save_as(save_path)
 
 if __name__ == '__main__':
     series_iuid = "1.3.46.670589.33.1.63792961161330624600001.5231325296116986594"
     position = 2
-    slice_idx = 120
+    slice_idx = 271
     res = get_mpr(series_iuid=series_iuid, positon=position, slice_idx=slice_idx)
+    res = get_mpr_total()
     print(json.dumps(res))
 
