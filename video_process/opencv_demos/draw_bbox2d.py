@@ -80,17 +80,10 @@ def find_2d_contours(slice_arr, label):
 
 
 if __name__ == "__main__":
-    # jpg_path = "/home/tx-deepocean/Downloads/black_cat.jpg"
-    # img = cv.imread(jpg_path)
-    # img = cv.resize(img, (512, 512))
     nii_path = "/media/tx-deepocean/Data/DICOMS/demos/cerebral_1/cerebral-seg.nii.gz"
     img = sitk.ReadImage(nii_path)
     img_arr = sitk.GetArrayFromImage(img)
     # aneurysm_mask_arr = np.zeros_like(img_arr)
     print(img_arr.shape)
-    # aneurysm_mask_arr[img_arr==100] = 1
-    # aneurysm_mask_arr[img_arr==88] = 2
-    # aneurysm_mask = sitk.GetImageFromArray(aneurysm_mask_arr)
-    # sitk.WriteImage(aneurysm_mask, "/media/tx-deepocean/Data/DICOMS/demos/cerebral_1/aneurysm_mask.nii.gz")
     res = find_contours(img_arr, 100, 1, 479)
     print(json.dumps(res))

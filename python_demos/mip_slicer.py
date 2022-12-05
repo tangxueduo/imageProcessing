@@ -89,41 +89,31 @@ def get_matrix(angle=90, axis="X") -> list:
 def get_total_by_matrix(
     img,rebuild_spacing: float, slab_thickness: float, azimuth_type: int, matrix: list, img_shape: list, spacing: list, st_origin: list
 ):
-    """根据matrix 方位， 返回重建后层数
-    Args:
-        slab_thickness: 20mm, 重建层厚
-        azimuth_type: 1, 2, 3(轴冠矢)
-    """
     total = 0
-    M = np.array([[matrix[0], matrix[4], matrix[8]], [matrix[1], matrix[5], matrix[9]], [matrix[2], matrix[6], matrix[10]]])
-    M= M.T
-    print(f'*******M: {M}')
-    # M = np.dot(direction, M)
+    M = np.array([[matrix[0], matrix[1], matrix[2]], [matrix[4], matrix[5], matrix[6]], [matrix[8], matrix[9], matrix[10]]])
+    direction = np.array([[-1,0,0],[0,-1,0], [0,0,1]])
+    M = np.dot(M, direction)
     old_ijk = [matrix[3],matrix[7], matrix[11]]
     ed_origin = np.array([st_origin[0]+img_shape[2]*spacing[0], st_origin[1]+img_shape[1]*spacing[1], st_origin[2]+ img_shape[0]*spacing[2]])
-
+    st_origin = np.array(st_origin)
     # 计算旋转前的 k_id
-    ijk = [matrix[3], matrix[7], matrix[11]]
     if azimuth_type == 1:
-        direction = [[1,0,0], [0,1,0], [0,0,-1]]
-        M = np.dot(direction, M)
-        # TODO: 获取旋转后最后一张的左上角的原点
+        print(M)
         new_ed_origin = np.dot(ed_origin, M).tolist()
         new_st_origin = np.dot(st_origin, M).tolist()
         print(f'******st_origin: {st_origin}, ed_origin: {ed_origin}')
-        print(f'*************new_ed_origin: {new_ed_origin}, new_st_origin: {new_st_origin}')
+        print(f'******new_st_origin: {new_st_origin}, new_ed_origin: {new_ed_origin}')
         new_spacing = [rebuild_spacing, rebuild_spacing, rebuild_spacing]
-        patient_origin = [st_origin[0], new_st_origin[1], new_ed_origin[2]]
+        patient_origin = [new_st_origin[0], new_st_origin[1], new_ed_origin[2]]
         total = math.floor((new_ed_origin[2] - slab_thickness - new_st_origin[2]) / rebuild_spacing)
         k_idx = total - (ijk_to_xyz(old_ijk, patient_origin, new_spacing, M)[2])
     elif azimuth_type == 2:
         # 冠 Y
-        direction = [[1,0,0], [0,-1,0], [0,0,1]]
-        M = np.dot(direction, M)
+        print(M)
         new_ed_origin = np.dot(ed_origin, M).tolist()
         new_st_origin = np.dot(st_origin, M).tolist()
         print(f'******st_origin: {st_origin}, ed_origin: {ed_origin}')
-        print(f'*************new_ed_origin: {new_ed_origin}, new_st_origin: {new_st_origin}')
+        print(f'******new_st_origin: {new_st_origin}, new_ed_origin: {new_ed_origin}')
         new_spacing = [rebuild_spacing, rebuild_spacing, rebuild_spacing]
         patient_origin = [st_origin[0], st_origin[1], new_ed_origin[1]]
         # k_idx = img.TransformPhysicalPointToIndex(old_ijk)[1]
@@ -132,18 +122,18 @@ def get_total_by_matrix(
 
     elif azimuth_type == 3:
         # 失 X
-        direction = [[1,0,0], [0,-1,0], [0,0,1]]
-        M = np.dot(direction, M)
+        direction = np.array([[1,0,0], [0,1,0], [0,0,-1]])
+        M = np.dot(M, direction)
         new_ed_origin = np.dot(ed_origin, M).tolist()
         new_st_origin = np.dot(st_origin, M).tolist()
         print(f'******st_origin: {st_origin}, ed_origin: {ed_origin}')
         print(f'*************new_st_origin: {new_st_origin}, new_ed_origin: {new_ed_origin}')
         new_spacing = [rebuild_spacing, rebuild_spacing, rebuild_spacing]
         # k_idx = img.TransformPhysicalPointToIndex(old_ijk)[0]
-        patient_origin = [new_ed_origin[1], st_origin[1], new_ed_origin[0]]
+        patient_origin = [new_ed_origin[2], new_st_origin[0], new_ed_origin[1]]
         k_idx = ijk_to_xyz(old_ijk, patient_origin, new_spacing, M)[2]
         # 这个为什么是1？？？        
-        total = math.floor((new_ed_origin[1] - slab_thickness - new_st_origin[1]) / rebuild_spacing)
+        total = math.floor((new_ed_origin[2] - slab_thickness - new_st_origin[2]) / rebuild_spacing)
     else:
         raise "azimuth_type input error"
     print(f'*************total: {total},k_idx:{k_idx}, patient_origin: {patient_origin}')
@@ -168,7 +158,7 @@ def get_mpr(
 
     t0 = time.time()
     spacing = img.GetSpacing()
-    st_origin = img.GetOrigin()
+    st_origin = list(img.GetOrigin())
     print(f'******st_origin： {st_origin},spacing: {spacing}')
     reader = vtk_image_from_array(img_arr, spacing, st_origin)
 
@@ -176,10 +166,13 @@ def get_mpr(
     extent = reader.GetOutput().GetExtent()  # 维度
     print(f"extent: {extent}")  # (x, y, z)
 
-    rotate_m = np.array([[matrix[0], matrix[4], matrix[8]], [matrix[1], matrix[5], matrix[9]], [matrix[2], matrix[6], matrix[10]]])
+    # TODO: 根据层厚 slab_thickness 层间距 原点，计算重建层数起止位置 done
+    rotate_m = np.array([[matrix[0], matrix[1], matrix[2]], [matrix[4], matrix[5], matrix[6]], [matrix[8], matrix[9], matrix[10]]])
+    direction = np.array([[-1,0,0],[0,-1,0], [0,0,1]])
+    rotate_m = np.dot(rotate_m, direction)
+    matrix_trans = rotate_m
     # ROI 体心 ijk
     ijk = [matrix[3], matrix[7], matrix[11]]
-
     # 技术问题, 未找到旋转后spacing计算方法, 写死
     rotate_spacing = [0.5, 0.5, 0.5]
     ed_origin = [            
@@ -188,16 +181,12 @@ def get_mpr(
         st_origin[2] + spacing[2] * img_shape[0],]
     # 根据层厚 SliceThickness 层间距 计算 mip 各方位总层数, SpacingBetweenSlices
     total,k_idx, _ = get_total_by_matrix(img, rebuild_spacing, slab_thickness, azimuth_type, matrix, img_shape, spacing, st_origin)
+
     if azimuth_type == 1:
-        direction = [[1,0,0], [0,1,0], [0,0,-1]]
-        rotate_m = np.dot(direction, rotate_m)
-        
         physical_idx = ijk[2]
         # 计算旋转前的 k_idx
-        # old_ijk = np.dot(ijk, np.linalg.inv(rotate_m))
         k_idx = img.TransformPhysicalPointToIndex(ijk)[2]
         print(f'**************k_idx: {k_idx}')
-
         # 变换后的 总长度
         rotate_st_origin = np.dot(st_origin, rotate_m).tolist()
         rotate_ed_origin = np.dot(ed_origin, rotate_m).tolist()
@@ -205,16 +194,12 @@ def get_mpr(
         # 暂时注释，和前端联调看下效果
         patient_origin = [rotate_st_origin[0], rotate_st_origin[1], rotate_ed_origin[2]]
         # 根据 slab_thickness 和 physical_idx 获取 mip 区间
-        tmp1 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx - 0.5 * slab_thickness]
-        tmp2 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx + 0.5 * slab_thickness]
         #  左面不够 0.5 * 重建厚度
         left_bounding = [rotate_st_origin[0], rotate_st_origin[1], rotate_st_origin[2] + slab_thickness]
         right_bounding = [rotate_st_origin[0], rotate_st_origin[1], rotate_ed_origin[2] - slab_thickness]
-        min_idx, max_idx = get_rebuild_range(tmp1, tmp2, patient_origin, rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=2)
+        min_idx, max_idx = get_rebuild_range(patient_origin, rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=2)
     elif azimuth_type == 2:
         # 计算旋转前的 k_idx
-        direction = [[1,0,0], [0,-1,0], [0,0,1]]
-        rotate_m = np.dot(direction, rotate_m)
         # old_ijk = np.dot(np.linalg.inv(rotate_m), ijk)
         k_idx = img.TransformPhysicalPointToIndex(ijk)[1]
         print(f'k_idx: {k_idx}')
@@ -229,26 +214,90 @@ def get_mpr(
         right_bounding = [rotate_ed_origin[0], rotate_ed_origin[1] - slab_thickness, rotate_ed_origin[2]]
         tmp1 = [rotate_st_origin[0], physical_idx - 0.5 * slab_thickness, rotate_st_origin[2]]
         tmp2 = [rotate_st_origin[0], physical_idx + 0.5 * slab_thickness, rotate_st_origin[2]]
-        min_idx, max_idx = get_rebuild_range(tmp1, tmp2, patient_origin, rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=2)
+        if (physical_idx - 0.5 * slab_thickness) < rotate_st_origin[2]:
+            print(11111111111111)
+            min_idx = ijk_to_xyz(
+                rotate_st_origin, patient_origin, rotate_spacing, rotate_m
+            )[2]
+            max_idx = ijk_to_xyz(
+                left_bounding,
+                patient_origin,
+                rotate_spacing,
+                rotate_m
+            )[2]
+        # 右面不够 0.5 * 重建厚度
+        elif (physical_idx + 0.5 * slab_thickness) > rotate_ed_origin[2]:
+            print(2222222222222)
+            max_idx = ijk_to_xyz(
+                rotate_ed_origin, patient_origin, rotate_spacing, rotate_m
+            )[2]
+            min_idx = ijk_to_xyz(
+                right_bounding,
+                patient_origin,
+                rotate_spacing,
+                rotate_m
+            )[2]
+        else:
+            print(33333333333333)
+            print(f'tmp1, tmp2: {tmp1}, {tmp2}')
+            min_idx = ijk_to_xyz(
+                tmp1, patient_origin, rotate_spacing, rotate_m
+            )[2]
+            max_idx = ijk_to_xyz(
+                tmp2, patient_origin, rotate_spacing, rotate_m
+            )[2]
+        # min_idx, max_idx = get_rebuild_range(patient_origin, rotate_st_origin, rotate_ed_origin, rotate_spacing, M, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=1)
     elif azimuth_type == 3:
         # 失 X
-        direction = [[1,0,0], [0,-1,0], [0,0,1]]
-        rotate_m = np.dot(direction, rotate_m)
-        # 计算旋转前的 k_id
         # old_ijk = np.dot(ijk, np.linalg.inv(rotate_m))
         k_idx = img.TransformPhysicalPointToIndex(ijk)[0]
-        print(f'****ijk: {ijk}, k_idx: {k_idx}')
+        print(f'****k_idx: {k_idx}')
+        direction = np.array([[1,0,0], [0,1,0], [0,0,-1]])
+        rotate_m = np.dot(rotate_m, direction)
+        print(f'*****rotate_m: {rotate_m}')
         # 变换后的 总长度
         rotate_st_origin = np.dot(st_origin, rotate_m).tolist()
         rotate_ed_origin = np.dot(ed_origin, rotate_m).tolist()
-        print(f'********rotate_st_origin: {rotate_st_origin}, rotate_ed_origin: {rotate_ed_origin}')
-        patient_origin = [rotate_ed_origin[1], st_origin[1], rotate_ed_origin[0]]
+        print(f'*rotate_st_origin: {rotate_st_origin}, rotate_ed_origin: {rotate_ed_origin}')
+        patient_origin = [rotate_ed_origin[2], rotate_st_origin[0], rotate_ed_origin[1]]
         physical_idx = ijk[0]
-        left_bounding = [rotate_st_origin[1] + slab_thickness, rotate_st_origin[2], rotate_st_origin[0]]
-        right_bounding = [rotate_ed_origin[1] - slab_thickness, rotate_ed_origin[2], rotate_ed_origin[0]]
-        tmp1 = [physical_idx - 0.5 * slab_thickness, rotate_st_origin[2], rotate_st_origin[0]]
-        tmp2 = [physical_idx + 0.5 * slab_thickness, rotate_ed_origin[2], rotate_ed_origin[0]]
-        min_idx, max_idx = get_rebuild_range(tmp1,tmp2, patient_origin,  rotate_st_origin, rotate_ed_origin, rotate_spacing, rotate_m, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=1)
+        left_bounding = [rotate_st_origin[2] + slab_thickness, rotate_st_origin[0], rotate_st_origin[1]]
+        right_bounding = [rotate_ed_origin[2] - slab_thickness, rotate_ed_origin[0], rotate_ed_origin[1]]
+        tmp1 = [physical_idx - 0.5 * slab_thickness, patient_origin[1], patient_origin[2]]
+        tmp2 = [physical_idx + 0.5 * slab_thickness, patient_origin[1], patient_origin[2]]
+        if (physical_idx - 0.5 * slab_thickness) < rotate_st_origin[2]:
+            print(11111111111111)
+            min_idx = ijk_to_xyz(
+                rotate_st_origin, patient_origin, rotate_spacing, rotate_m
+            )[0]
+            max_idx = ijk_to_xyz(
+                left_bounding,
+                patient_origin,
+                rotate_spacing,
+                rotate_m
+            )[0]
+        # 右面不够 0.5 * 重建厚度
+        elif (physical_idx + 0.5 * slab_thickness) > rotate_ed_origin[2]:
+            print(2222222222222)
+            max_idx = ijk_to_xyz(
+                rotate_ed_origin, patient_origin, rotate_spacing, rotate_m
+            )[0]
+            min_idx = ijk_to_xyz(
+                right_bounding,
+                patient_origin,
+                rotate_spacing,
+                rotate_m
+            )[0]
+        else:
+            print(33333333333333)
+            print(f'tmp1, tmp2: {tmp1}, {tmp2}')
+            min_idx = ijk_to_xyz(
+                tmp1, patient_origin, rotate_spacing, rotate_m
+            )[0]
+            max_idx = ijk_to_xyz(
+                tmp2, patient_origin, rotate_spacing, rotate_m
+            )[0]
+            # min_idx, max_idx = get_rebuild_range(patient_origin,  rotate_st_origin, rotate_ed_origin, rotate_spacing, M, left_bounding, right_bounding, physical_idx, slab_thickness, azimuth_idx=0)
     else:
         raise "azimuth_type input error"
     slice_nums = max_idx - min_idx
@@ -256,6 +305,11 @@ def get_mpr(
     
     resliceAxes = vtk.vtkMatrix4x4()
     resliceAxes.DeepCopy(matrix)
+    for i in range(3):
+        for j in range(3):
+            resliceAxes.SetElement(i, j, matrix_trans[i][j])
+            resliceAxes.SetElement(i, j, matrix_trans[i][j])
+            resliceAxes.SetElement(i, j, matrix_trans[i][j])
     reslice = vtk.vtkImageSlabReslice()
     # reslice.SetOutputSpacing([spacing[0], spacing[1], rebuild_spacing])
     reslice.SetInputConnection(reader.GetOutputPort())  # 截取的体数据
@@ -289,6 +343,8 @@ def get_mpr(
     np_array = np_array.astype(np.int16)
     save_path = "./mip.dcm"
     result = sitk.GetImageFromArray(np_array)
+    result.SetMetaData("0028|1050", "300")
+    result.SetMetaData("0028|1051", "800")
     sitk.WriteImage(result, save_path)
     # np_array_to_dcm(ds, save_path, np_array, azimuth_type, matrix, st_origin)
     res["dcm_path"] = f"/tmp/{rebuild_type}.dcm"
@@ -299,48 +355,50 @@ def get_mpr(
     print(f"a mip cost: {time.time() - t0}")
     return res
 
-def get_rebuild_range(tmp1, tmp2, patient_origin, rotate_st_origin,rotate_ed_origin, rotate_spacing, rotate_m, left_bounding,right_bounding, physical_idx, slab_thickness, azimuth_idx=2):
+def get_rebuild_range(patient_origin, rotate_st_origin,rotate_ed_origin, rotate_spacing, M, left_bounding,right_bounding, physical_idx, slab_thickness, azimuth_idx=2):
     """"""
-    if (physical_idx - 0.5 * slab_thickness) < rotate_st_origin[azimuth_idx]:
+    if azimuth_idx == 2:
+        tmp1 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx - 0.5 * slab_thickness]
+        tmp2 = [rotate_st_origin[0], rotate_st_origin[1], physical_idx + 0.5 * slab_thickness]
+    elif azimuth_idx == 1:
+        tmp1 = [rotate_st_origin[0], physical_idx - 0.5 * slab_thickness, rotate_st_origin[2]]
+        tmp2 = [rotate_st_origin[0], physical_idx + 0.5 * slab_thickness, rotate_st_origin[2]]
+    else:
+        tmp1 = [physical_idx - 0.5 * slab_thickness, rotate_st_origin[2], rotate_st_origin[0]]
+        tmp2 = [physical_idx + 0.5 * slab_thickness, rotate_st_origin[2], rotate_st_origin[0]]
+
+    if (physical_idx - 0.5 * slab_thickness) < rotate_st_origin[2]:
         print(11111111111111)
         min_idx = ijk_to_xyz(
-            rotate_st_origin, patient_origin, rotate_spacing, rotate_m
+            rotate_st_origin, patient_origin, rotate_spacing, M
         )[2]
         max_idx = ijk_to_xyz(
             left_bounding,
             patient_origin,
             rotate_spacing,
-            rotate_m
+            M
         )[2]
     # 右面不够 0.5 * 重建厚度
-    elif (physical_idx + 0.5 * slab_thickness) > rotate_ed_origin[azimuth_idx]:
+    elif (physical_idx + 0.5 * slab_thickness) > rotate_ed_origin[2]:
         print(2222222222222)
         max_idx = ijk_to_xyz(
-            rotate_ed_origin, patient_origin, rotate_spacing, rotate_m
+            rotate_ed_origin, patient_origin, rotate_spacing, M
         )[2]
         min_idx = ijk_to_xyz(
             right_bounding,
             patient_origin,
             rotate_spacing,
-            rotate_m
+            M
         )[2]
     else:
         print(33333333333333)
         print(f'tmp1, tmp2: {tmp1}, {tmp2}')
-        if azimuth_idx==1:
-            min_idx = ijk_to_xyz(
-                tmp1, patient_origin, rotate_spacing, rotate_m
-            )[1]
-            max_idx = ijk_to_xyz(
-                tmp2, patient_origin, rotate_spacing, rotate_m
-            )[1]
-        else:
-            min_idx = ijk_to_xyz(
-                tmp1, patient_origin, rotate_spacing, rotate_m
-            )[2]
-            max_idx = ijk_to_xyz(
-                tmp2, patient_origin, rotate_spacing, rotate_m
-            )[2]
+        min_idx = ijk_to_xyz(
+            tmp1, patient_origin, rotate_spacing, M
+        )[2]
+        max_idx = ijk_to_xyz(
+            tmp2, patient_origin, rotate_spacing, M
+        )[2]
     return min_idx, max_idx
 
 def ijk_to_xyz(point_ijk, origin, spacing, direction):
@@ -390,13 +448,6 @@ def np_array_to_dcm(ds: pydicom.FileDataset, save_path:str, np_array:np.ndarray,
     ds.PixelData = np_array.tobytes()
     ds.is_implicit_VR = True
     ds.save_as(save_path)
-
-
-
-def get_physical(series_path):
-
-    image_shape = (original_ds.Columns, original_ds.Rows, len(dcm_list))
-    return
 
 
 def find_contours(mask: np.ndarray, label: int, position: int, idx: int) -> list:
@@ -459,32 +510,33 @@ def main():
     # 确保matrix 坐标系正确
     # 轴
     # matrix = [
-    #     1, 0, 0, 0.2490234375,
-    #     0, 1, 0, -176.2509765625, 
-    #     0, 0, -1, -622.7999877929688, 
-    #     0, 0, 0, 1
+    #     0, 0, -1, 0.249023,
+    #     -1, 0, 0, -176.5, 
+    #     0, 1, 0, -623.05,
+    #     0, 0, 0, 1 
     # ]
-    # 冠
-    # matrix = [
-    #     1, 0, 0, 0.0567169189453125, 
-    #     0, 0, 1, -185.2894287109375, 
-    #     0, -1, 0, -587.7999877929688, 
-    #     0, 0, 0, 1
-    # ]   
-    # 矢
+    # 冠任意
     matrix = [
-            0, 0,  1, 0.2490234375,
-            1, 0,  0, -176.2509765625,
-            0, -1, 0, -622.7999877929688,
-            0, 0,  0, 1
-        ]  
+    -0.458185, 0, -0.888857, 9.9871, 
+    -0.888857, 0, 0.458185, -182.049, 
+    0, 1, 0, -623.05,
+    0, 0, 0, 1 
+    ]
+    # 矢任意 ijk要乘(手动)[-1, -1, 1], M 也要乘[-1,-1,1]
+    # matrix = [
+    # 0.888857, 0, -0.458185, -35.5807, 
+    # -0.458185, 0, -0.888857, -245.713 ,
+    # 0, 1, 0, -623.05, 
+    # 0, 0, 0, 1,
+    # ]  
+    # 轴任意
 
     res = get_mpr(
         slab_thickness,
         slab_thickness * scale,
         matrix,
         rebuild_type="MIP",
-        azimuth_type=3,
+        azimuth_type=2,
     )
     # print(json.dumps(res))
 
