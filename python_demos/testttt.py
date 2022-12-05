@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-img = cv2.imread("./tmip_rotated_image.jpg")
+img = cv2.imread("./images/png/tmip_rotated_image.jpg")
 
 
 def on_EVENT_LBUTTONDOWN(event, x, y, flags, param):
