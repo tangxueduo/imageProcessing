@@ -1,17 +1,16 @@
 import math
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import SimpleITK as sitk
 
 
 def gray2rgb_array(gray_array):
     temp_array = gray_array
-    max_pt = np.max(temp_array)
-    min_pt = np.min(temp_array)
-    window_width = 100
-    window_level = 50
+    # max_pt = np.max(temp_array)
+    # min_pt = np.min(temp_array)
+    window_width = 1700
+    window_level = -600
     true_max_pt = window_level + (window_width / 2)
     true_min_pt = window_level - (window_width / 2)
     scale = 255 / (true_max_pt - true_min_pt)
