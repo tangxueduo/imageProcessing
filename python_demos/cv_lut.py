@@ -1,8 +1,6 @@
-import math
 import time
 
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 import SimpleITK as sitk
 
@@ -268,8 +266,8 @@ custom_map = [
 
 def gray2rgb_array(gray_array):
     temp_array = gray_array
-    max_pt = np.max(temp_array)
-    min_pt = np.min(temp_array)
+    # max_pt = np.max(temp_array)
+    # min_pt = np.min(temp_array)
     window_width = 20
     window_level = 10
     true_max_pt = window_level + (window_width / 2)
@@ -298,11 +296,11 @@ if __name__ == "__main__":
     cbf_gray_arr = cbf_arr[10, :, :]
 
     rgb_arr = gray2rgb_array(cbf_gray_arr)
-
     custom_map_arr = np.array(custom_map)
     custom_map_arr = np.squeeze(
         np.dstack([custom_map_arr[:, 2], custom_map_arr[:, 1], custom_map_arr[:, 0]]), 0
     )  # RGB => BGR
+
     custom_map_arr = np.multiply(255, custom_map_arr)
     print(custom_map_arr)
     rgb_arr = rgb_arr.astype(np.uint8)

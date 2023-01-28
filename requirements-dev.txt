@@ -16,3 +16,4 @@ pytest-benchmark==3.4.1           # A pytest fixture for benchmarking code
 pygal==2.4.0                      # plotting --benchmark-histogram
 pygaljs==1.0.2                    # plotting --benchmark-histogram
 types-docutils==0.1.7             # stub package for mypy
+click==8.0.4
