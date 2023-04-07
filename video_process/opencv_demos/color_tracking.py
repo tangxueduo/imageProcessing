@@ -4,7 +4,6 @@ import numpy as np
 video_path = "/home/tx-deepocean/Downloads/tom_and_jerry.mp4"
 cap = cv2.VideoCapture(video_path)
 isopen = cap.isOpened()
-print(isopen)
 
 # 追踪视频中的蓝色物体，
 while 1:
@@ -25,9 +24,8 @@ while 1:
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
         break
-cv.destroyAllWindows()
+cv2.destroyAllWindows()
 
 # 如何找到HSV值来追踪？
-green = np.uint8([[[0, 255, 0]]])
-hsv_green = cv.cvtColor(green, cv.COLOR_BGR2HSV)
-print(hsv_green)
+green = np.uint8([[[0, 255, 0]]])  # type:ignore
+hsv_green = cv2.cvtColor(green, cv2.COLOR_BGR2HSV)

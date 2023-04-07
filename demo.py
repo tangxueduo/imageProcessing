@@ -1,15 +1,24 @@
-import requests 
-# import os
+import time
 
-# url = "http://172.16.3.35:3333/series/1.2.156.112605.189250946070725.20181216014141.3.5316.10/predict/ct_aorta"
-# with open("/media/tx-deepocean/Data/DICOMS/demos/aorta/new_mock_data/ct_aorta_result.json", "r") as fp:
-#     aorta_res = fp.read()
-# res = requests.put(url, json=aorta_res)
-# treeline_url = "http://172.16.3.35:3333/series/1.2.156.112605.189250946070725.20181216014141.3.5316.10/predict/ct_aorta_treeline"
-# ress = requests.get(url).json()
-# res1 = requests.put(treeline_url, json={"treeLines": ress["aorta"]["aorta"]["curveTreeLines"]})
+import numpy as np
+import SimpleITK as sitk
 
-url = "http://172.16.3.35:3333/series/1.2.156.112605.189250946070725.20181216014141.3.5316.10/feedback/ct_aorta_series_images"
+# t = time.time()
+# lesion_nii = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/aorta/lesion-seg.nii.gz")
+# vessel_nii = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/aorta/output_lps-seg.nii.gz")
+
+# lesion_mask = sitk.GetArrayFromImage(lesion_nii)
+# vessel_mask = sitk.GetArrayFromImage(vessel_nii)
+
+# out = np.where(lesion_mask!=0, lesion_mask, vessel_mask)
+# print(np.unique(out))
+
+url = "http://172.16.3.35:3333/series/1.2.840.113619.2.404.3.1074448704.575.1620281836.47.4/feedback/ct_aorta_film_images"
+import requests
 
 res = requests.get(url).json()
-requests.put(url, json={"seriesImages": res["filmImages"]})
+
+res["filmImages"].pop("Custom")
+# res["seriesImages"].pop("Custom")
+print(res)
+requests.put(url=url, json=res)
