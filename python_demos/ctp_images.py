@@ -1,23 +1,15 @@
 ﻿import io
-import os
-import time
 
-import cv2
 import matplotlib.pyplot as plt
-import numba as nb
 import numpy as np
 import pydicom
 import SimpleITK as sitk
-from constants import BRAIN_AREA_MAP
 from matplotlib.colors import LinearSegmentedColormap
 from PIL import Image
 
-# import pandas as pd
-
-
 mask_path = "/media/tx-deepocean/Data/DICOMS/demos/29"
 dcm_file = "/media/tx-deepocean/Data/DICOMS/demos/TMAX/TMAX023.dcm"
-ds = pydicom.read_file(dcm_file, force=True)
+ds = pydicom.read_file(dcm_file, force=True)  # type:ignore
 
 mask_info_map = {
     "CBV": {
@@ -147,9 +139,8 @@ def get_images(image_type: str, mask_array: np.ndarray):
         dict(str, np.ndarray)
     """
     # t0 = time.time()
-    result = {}
+    result = {}  # type: ignore
     if image_type in ["CBV", "CBF", "MTT", "TTP", "TMAX"]:
-        # pass
         # 确定 pixel value 上限 下限
         # mask_array = mask_array.astype(np.int16)
 
@@ -184,7 +175,10 @@ def get_images(image_type: str, mask_array: np.ndarray):
                 dcm_2d_array = mask_array[dcm_slice, :, :]
                 plt.figure(figsize=(5.12, 5.12), facecolor="#000000")
                 plt.axis("off")
-                im = plt.imshow(np.where(dcm_2d_array==0, -1, dcm_2d_array), cmap=plt.get_cmap(my_cmap))
+                im = plt.imshow(
+                    np.where(dcm_2d_array == 0, -1, dcm_2d_array),
+                    cmap=plt.get_cmap(my_cmap),
+                )
                 # 显示色读条
                 plt.colorbar(im)
                 plt.savefig("./model_map.jpg")
@@ -193,19 +187,19 @@ def get_images(image_type: str, mask_array: np.ndarray):
                     buffer.seek(0)
                     image = Image.open(buffer)
                     ar = np.array(image)
-    # np_array_to_dcm(
-    #     ds,
-    #     ar.astype(np.uint8),
-    #     f"./model_map{str(index)}.dcm",
-    #     ww=mask_info_map[image_type]["ww"],
-    #     wl=mask_info_map[image_type]["wl"],
-    #     is_rgb=True,
-    # )
+    np_array_to_dcm(
+        ds,
+        ar.astype(np.uint8),
+        f"./model_map{str(index)}.dcm",
+        ww=mask_info_map[image_type]["ww"],
+        wl=mask_info_map[image_type]["wl"],
+        is_rgb=True,
+    )
     # index += 1
     # print(time.time() - t0)
     # ----------以下不用看了
     # tMIP 和 tAverage 需要更改 array dtype
-    index = 1111
+    # index = 1111
     # if (
     #     image_type == "tAve_NO_SKULL"
     #     or image_type == "tAve_WITH_SKULL"

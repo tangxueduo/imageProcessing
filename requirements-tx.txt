@@ -1,0 +1,9 @@
+-i https://repos.infervision.com/repository/pypi/simple
+head-ctp-mismatch==0.1.0
+scipy==1.5.3
+sitktools==0.9.3
+numpy==1.20.1
+scikit-image==0.19.3
+PyWavelets==1.1.1
+SimpleITK==1.2.22
+connected_components_3d>=3.10.1

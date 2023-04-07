@@ -2,22 +2,27 @@ import math
 import time
 
 import numpy as np
-from loguru import logger
-import SimpleITK as sitk
-from python_demos.utils import modify_dcm_tags
 import pydicom
+import SimpleITK as sitk
+from loguru import logger
 
-original_ds = pydicom.read_file("/media/tx-deepocean/Data/DICOMS/demos/aorta/CE027001-118121600070-1809-402/CE027001-118121600070-1809-402_0272.dcm", force=True)
+from python_demos.utils import modify_dcm_tags
+
+original_ds = pydicom.read_file(
+    "/media/tx-deepocean/Data/DICOMS/demos/aorta/CE027001-118121600070-1809-402/CE027001-118121600070-1809-402_0272.dcm",
+    force=True,
+)
+
 
 def gen_probe(
     original_lpi_array: np.ndarray,
     lps_ijk: np.ndarray,
-    points_data: list,
+    points_data: dict,
     cursor_index: int,
     spacing_x=0.5,
     spacing_y=0.5,
-    width=30,
-    height=30,
+    width=50,
+    height=50,
     ratio=2.0,
 ) -> np.ndarray:
     """
@@ -33,7 +38,6 @@ def gen_probe(
         spacing_x,spacing_y: 采样间距, 目前写死为 0.5
         p_w, p_h: 探针 size
     """
-    t0 = time.time()
     im_depth, im_height, im_width = original_lpi_array.shape
     pixel_data = np.ones(shape=(height, width), dtype=np.int16) * (-1024)
 
@@ -41,37 +45,76 @@ def gen_probe(
     normal = points_data.get("normals")[cursor_index]
     center = points_data.get("points")[cursor_index]
 
-    w_off_set = vec3_scale(normal, spacing_x * width * 0.5)  # todo 对比前端确定spacing顺序
-    h_off_set = vec3_scale(bi_normal, spacing_y * height * 0.5)
+    w_off_set = np.dot(normal, spacing_x * width * 0.5)  # todo 对比前端确定spacing顺序
+    h_off_set = np.dot(bi_normal, spacing_y * height * 0.5)
 
     origin = center.copy()
     origin = np.subtract(origin, w_off_set).tolist()
     origin = np.subtract(origin, h_off_set).tolist()
 
     # 矩阵数量积
-    w_vector = vec3_scale(normal, spacing_x)
-    h_vector = vec3_scale(bi_normal, spacing_y)
-    m = lps_ijk
+    w_vector = np.dot(normal, spacing_x)
+    h_vector = np.dot(bi_normal, spacing_y)
+    # m = lps_ijk
     a = [origin[0], origin[1], origin[2], 1]
+    m = np.reshape(lps_ijk, (4, 4))
     t = [0, 0, 0, 0]
+    t0 = time.time()
     for i in range(height):
         for j in range(width):
-            [x, y, z, w] = a
-            t[0] = m[0] * x + m[4] * y + m[8] * z + m[12] * w
-            t[1] = m[1] * x + m[5] * y + m[9] * z + m[13] * w
-            t[2] = m[2] * x + m[6] * y + m[10] * z + m[14] * w
+            t[0], t[1], t[2] = np.dot(a, m)[:-1]
             if (
                 0 <= t[2] < im_depth * ratio
                 and 0 <= t[0] < im_width * ratio
                 and 0 <= t[1] < im_height * ratio
             ):
-                pixel_data[j][i] = get_hu(original_lpi_array, t[0], t[1], t[2], ratio)
-            a[0] += w_vector[0]
-            a[1] += w_vector[1]
-            a[2] += w_vector[2]
-        a[0] += h_vector[0] - w_vector[0] * width
-        a[1] += h_vector[1] - w_vector[1] * width
-        a[2] += h_vector[2] - w_vector[2] * width
+                t[0] /= ratio
+                t[1] /= ratio
+                t[2] /= ratio
+                t[2] = min(max(t[2], 0), im_depth - 1)
+
+                x0, y0, z0 = math.floor(t[0]), math.floor(t[1]), math.floor(t[2])
+                x1 = min(max(x0, 0), im_width - 1)
+                y2 = min(max(y0, 0), im_height - 1)
+                fz = min(max(z0, 0), im_depth - 1)
+                x2 = min(max(x1 + 1, 0), im_width - 1)
+                y1 = min(max(y2 + 1, 0), im_height - 1)
+                cz = min(max(fz + 1, 0), im_depth - 1)
+
+                if x1 == x2 or y1 == y2:
+                    return -1024
+
+                # hu1 = fn(original_lpi_array, t[0], t[1], x1, x2, y1, y2, fz)
+                fQ11 = original_lpi_array[fz, y1, x1]
+                fQ21 = original_lpi_array[fz, y1, x2]
+                fQ12 = original_lpi_array[fz, y2, x1]
+                fQ22 = original_lpi_array[fz, y2, x2]
+                # TODO 重新确认这一中间变量的name
+                temp = (x2 - x1) * (y2 - y1)
+                hu1 = (
+                    (fQ11 / temp) * ((x2 - t[0]) * (y2 - t[1]))
+                    + (fQ21 / temp) * ((t[0] - x1) * (y2 - t[1]))
+                    + (fQ12 / temp) * ((x2 - t[0]) * (t[1] - y1))
+                    + (fQ22 / temp) * ((t[0] - x1) * (t[1] - y1))
+                )
+                # hu2 = fn(original_lpi_array, t[0], t[1], x1, x2, y1, y2, cz)
+                fQ11 = original_lpi_array[fz, y1, x1]
+                fQ21 = original_lpi_array[fz, y1, x2]
+                fQ12 = original_lpi_array[fz, y2, x1]
+                fQ22 = original_lpi_array[fz, y2, x2]
+                # TODO 重新确认这一中间变量的name
+                temp = (x2 - x1) * (y2 - y1)
+                hu2 = (
+                    (fQ11 / temp) * ((x2 - t[0]) * (y2 - t[1]))
+                    + (fQ21 / temp) * ((t[0] - x1) * (y2 - t[1]))
+                    + (fQ12 / temp) * ((x2 - t[0]) * (t[1] - y1))
+                    + (fQ22 / temp) * ((t[0] - x1) * (t[1] - y1))
+                )
+                hu = (cz - t[2]) * hu1 + (t[2] - fz) * hu2
+                pixel_data[i][j] = hu
+                # pixel_data[i][j] = get_hu(original_lpi_array, t[0], t[1], t[2], ratio)
+            a[:3] = np.add(a[:3], w_vector)
+        a[:3] = np.add(a[:3], np.subtract(h_vector, np.dot(w_vector, width)))
     logger.debug(f"Probe cost time is : {time.time() - t0}")
     return pixel_data, origin
 
@@ -116,12 +159,13 @@ def fn(original_lpi_array, x, y, x1, x2, y1, y2, z):
     )
     return hu
 
+
 # TODO: 迁移至公用处
 def get_lps_ijk(spacing_y, spacing_x, origin0, origin1, orientation, ratio=2.0):
     # x 向量投影
-    di = vec3_scale(orientation[:-3], spacing_y / ratio)
+    di = np.dot(orientation[:-3], spacing_y / ratio)
     # y　向量投影
-    dj = vec3_scale(orientation[3:], spacing_x / ratio)
+    dj = np.dot(orientation[3:], spacing_x / ratio)
     dk = np.subtract(origin1, origin0)
     scale_k = [dk[0], dk[1], dk[2] / ratio]
     ijk_lps = np.array([*di, 0, *dj, 0, *scale_k, 0, *origin0, 1], dtype=float)
@@ -191,9 +235,8 @@ def get_probe_data(volume_path: str):
     sitk_img = sitk.ReadImage(volume_path)
     original_lpi_array = sitk.GetArrayFromImage(sitk_img)
     # 物理信息
-    spacing_x, spacing_y  = sitk_img.GetSpacing()[:2]
+    spacing_x, spacing_y = sitk_img.GetSpacing()[:2]
     origin_lpi = sitk_img.TransformIndexToPhysicalPoint([0, 0, sitk_img.GetDepth() - 1])
-    origin_lpi = [-163.81739807128906, -174.658203125, -691.176513671875]
     thickness = (
         sitk_img.TransformIndexToPhysicalPoint([0, 0, sitk_img.GetDepth() - 1])[2]
         - sitk_img.TransformIndexToPhysicalPoint([0, 0, sitk_img.GetDepth() - 2])[2]
@@ -209,30 +252,12 @@ def get_probe_data(volume_path: str):
     # 获取中线信息
     url = "http://172.16.3.35:3333/series/1.2.156.112605.189250946070725.20181216014141.3.5316.10/predict/ct_aorta_treeline"
     import requests
+
     treeline = requests.get(url).json()
     return original_lpi_array, lps_ijk, treeline, sitk_img.GetSpacing(), origin_lpi
 
 
 def read_lines(in_lines):
-    type_show = [
-        "AR",
-        "L-CIA",
-        "CT",
-        "R-RA",
-        "L-RA",
-        "SMA",
-        "IMA",
-        "AO",
-        "FAA",
-        "BCT",
-        "L-CCA",
-        "L-SA",
-        "R-PLB",
-        "ARCH",
-        "TA",
-        "AA",
-        "R-CIA",
-    ]
     out = {"lines": {}, "types": {}}
     for label, idxs in in_lines["typeShow"].items():
         line = []
@@ -286,6 +311,7 @@ def vec3_scale(a, b):
     out = [a[0] * b, a[1] * b, a[2] * b]
     return out
 
+
 def _save_dcm(array, dcm_path, spacing, options):
     img = sitk.GetImageFromArray(array)
     img.SetSpacing(spacing)
@@ -294,8 +320,6 @@ def _save_dcm(array, dcm_path, spacing, options):
 
 
 if __name__ == "__main__":
-    # TODO: @txueduo 测试结束后删除 main
-    # volume_path = "/media/tx-deepocean/Data/DICOMS/demos/aorta/CE027001-118121909405-2273-402.nii.gz"
     volume_path = "/media/tx-deepocean/Data/DICOMS/demos/aorta/1.2.156.112605.189250946070725.20181216014141.3.5316.10.nii.gz"
     original_lpi_array, lps_ijk, treeline, spacing, origin = get_probe_data(volume_path)
     all_line = read_lines(treeline["treeLines"]["data"])
@@ -306,8 +330,11 @@ if __name__ == "__main__":
         "normals": normals,
         "bi_normals": bi_normals,
     }
-    cursor_index = 1
-    probe_arr, _ = gen_probe(original_lpi_array[::-1], lps_ijk, points_data, cursor_index)
+    cursor_index = 20
+    probe_arr, _ = gen_probe(
+        original_lpi_array[::-1], lps_ijk, points_data, cursor_index
+    )
     import cv2
+
     cv2.imwrite("./demo.png", probe_arr)
     # _save_dcm(probe_arr, "./demo.dcm",spacing, {"origin": origin})

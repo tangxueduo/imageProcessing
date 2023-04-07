@@ -8,7 +8,7 @@ import SimpleITK as sitk
 """需要考虑根据label 的 position， 确认 contour 属于 同label的 label1 还是 label2"""
 
 dcm_path = "/media/tx-deepocean/Data/DICOMS/ct_cerebral/CN010002-13696724/1.2.840.113619.2.416.10634142502611409964348085056782520111/1.2.840.113619.2.416.77348009424380358976506205963520437809/1.2.840.113619.2.416.2106685279137426449336212617073446717.1"
-ds = pydicom.read_file(dcm_path, force=True)
+ds = pydicom.read_file(dcm_path, force=True)  # type:ignore
 
 
 def find_contours(mask: np.ndarray, label: int, position: int, idx: int) -> list:
@@ -29,8 +29,6 @@ def find_contours(mask: np.ndarray, label: int, position: int, idx: int) -> list
     elif position == 3:
         # slice_arr = mask[:, :, idx]
         slice_arr = np.flipud(mask[:, :, idx - 1])
-    else:
-        raise "position not found"
     contour, bboxes = find_2d_contours(slice_arr, label)
     res["contour"] = contour
     res["bboxes"] = bboxes
