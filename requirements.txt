@@ -1,5 +1,5 @@
 -i https://mirrors.aliyun.com/pypi/simple/
---extra-index https://pypi.tuna.tsinghua.edu.cn/simple
+
 chardet==4.0.0
 cmake==3.20.2
 distro==1.5.0
@@ -28,4 +28,3 @@ nibabel==3.2.2
 matplotlib==3.5.1
 pydicom==2.3.0
 loguru==0.6.0
-

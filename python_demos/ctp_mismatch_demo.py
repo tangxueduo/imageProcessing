@@ -5,18 +5,28 @@ import json
 import os
 import time
 from collections import defaultdict
+from multiprocessing import Process
 
 import numpy as np
+import pydicom
 import SimpleITK as sitk
 from head_ctp_mismatch import HeadCtpMismatchPredictor
 from loguru import logger
 from skimage import measure
 
-from python_demos.mismatch_utils import (BRAIN_AREA_MAP, LEFT_BRAIN_LABEL,
-                                         RIGHT_BRAIN_LABEL, ddict2dict,
-                                         gray2rgb_array, judge_average_all)
+from python_demos.mismatch_utils import (
+    BRAIN_AREA_MAP,
+    LEFT_BRAIN_LABEL,
+    RIGHT_BRAIN_LABEL,
+    ddict2dict,
+    gray2rgb_array,
+    judge_average_all,
+)
 
-# from multiprocessing import Process, Pool
+ds = pydicom.read_file(
+    "/media/tx-deepocean/Data/DICOMS/demos/1.3.12.2.1107.5.1.4.73767.30000015112323443037500014176/1.3.12.2.1107.5.1.4.73767.30000015112323443037500015002",
+    force=True,
+)
 COLOR_MAP = {
     "#FFFF00": [0, 255, 255],
     "#FF5959": [89, 89, 255],
@@ -147,7 +157,19 @@ class Mismatch:
             ).copy()
             tmip_3d_arr[cbf_2d_arr == 1] = COLOR_MAP[Mismatch_thresholds[0]["color"]]
             tmip_3d_arr[tmax_2d_arr == 1] = COLOR_MAP[Mismatch_thresholds[1]["color"]]
+
             self.img_result["Mismatch_" + str(dcm_idx)] = tmip_3d_arr
+            if dcm_idx == 10:
+                ds.PhotometricInterpretation = "RGB"
+                ds.WindowWidth = 255
+                ds.WindowCenter = 127
+                ds.SamplesPerPixel = 3
+                ds.BitsStored = 8
+                ds.BitsAllocated = 8
+                ds.HighBit = 7
+                ds.PixelRepresentation = 1
+                ds.PixelData = tmip_3d_arr.astype("uint8").tobytes()
+                ds.save_as("demo.dcm")
 
     def stain(
         self, thresholds, pre_name, algo_low_array, alo_mid_array, algo_high_aray
@@ -706,13 +728,19 @@ class Mismatch:
     def gen_mismatch_all(self):
         t0 = time.time()
         # TODO: 多进程
-        self.gen_rcbf()
-        self.gen_rcbv()
-        self.gen_tmax()
-        self.gen_mismatch()
+        func_list = [
+            self.gen_rcbf(),
+            self.gen_rcbv(),
+            self.gen_tmax(),
+            self.gen_mismatch(),
+        ]
+        for func in func_list:
+            p = Process(target=func)
+            p.start()
         print(f"total cost: {time.time() - t0}")
         # 计算病灶，tmax>6s || rmtt>145%
         ctp_lesion = ddict2dict(self.get_lesions())
+        print(self.img_result.keys())
         return self.img_result, ctp_lesion
 
 
