@@ -4,7 +4,7 @@ import numpy as np
 import pydicom
 import SimpleITK as sitk
 
-from python_demos.utils import array_to_dicom, draw_text, resize_hu
+from python_demos.tools import array_to_dicom, draw_text, resize_hu
 
 # https://blog.csdn.net/u014264373/article/details/119545255
 # https://www.codenong.com/54742326/

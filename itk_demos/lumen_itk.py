@@ -107,7 +107,7 @@ def draw_mask(arr, canvas, color, opacity=0.6):
 
 
 def draw(res, fname):
-    canvas = sitk.GetArrayFromImage(sitk.IntensityWindowing(res["im"]))
+    canvas = sitk.GetArrayFromImage(sitk.IntensityWindowing(res["im"], 300, 800))
     print(canvas.shape)
     canvas = np.repeat(canvas[..., None], 3, axis=-1)
     # if res["vessel"].shape[0] > 0:
@@ -120,7 +120,7 @@ def draw(res, fname):
             canvas = draw_contour(i, canvas, (255, 0, 0))
         # for i in [res["plaque_mask"]]:
         #     canvas = draw_contour(i, canvas, (0, 255, 0))
-    canvas = draw_mask(sitk.GetArrayFromImage(res["plaque_mask"]), canvas, (0, 255, 0))
+    # canvas = draw_mask(sitk.GetArrayFromImage(res["plaque_mask"]), canvas, (0, 255, 0))
     print(fname)
     cv2.imwrite(fname, canvas)
 

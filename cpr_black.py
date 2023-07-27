@@ -6,7 +6,7 @@ import pydicom
 import SimpleITK as sitk
 from loguru import logger
 
-from python_demos.utils import modify_dcm_tags
+from python_demos.tools import modify_dcm_tags
 
 original_ds = pydicom.read_file(
     "/media/tx-deepocean/Data/DICOMS/demos/aorta/CE027001-118121600070-1809-402/CE027001-118121600070-1809-402_0272.dcm",
