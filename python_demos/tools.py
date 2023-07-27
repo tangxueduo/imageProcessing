@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from pydicom.dataset import FileDataset
 from pydicom.uid import ExplicitVRLittleEndian, ImplicitVRLittleEndian
 
-FONT = ImageFont.truetype("SourceHanSansCN-Normal.ttf", 18)
+FONT = ImageFont.truetype("statics/SourceHanSansCN-Normal.ttf", 18)
 
 
 def modify_dcm_tags(dcm_path: str, original_ds: FileDataset, options):

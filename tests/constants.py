@@ -8,12 +8,20 @@ class TAGMethod:
 
 
 TAGMETHODS = [TAGMethod.CENTERLINE, TAGMethod.LUMEN, TAGMethod.REMOVE_PLAQUE]
+
+MIP_POSITION_SHAPE_MAP = {"axial": 0, "coronal": 1, "sagittal": 2}
+
 RADIUS_MAP: Dict[str, int] = {
     TAGMethod.CENTERLINE: 1,
     TAGMethod.LUMEN: 0,
     TAGMethod.REMOVE_PLAQUE: 350,
 }
 TAG_VESSELS = ["vessel2", "vessel5", "vessel9"]
+TAG_METHOD_MAP = {
+    "": TAGMethod.LUMEN,
+    "": TAGMethod.CENTERLINE,
+    "": TAGMethod.REMOVE_PLAQUE,
+}
 CPR_WIDTH = 80
 LUMEN_WIDTH = 150
 LUMEN_WIDTH_HEAD = 50
@@ -40,7 +48,7 @@ CPRLibProps = {
         "contour_smooth_params": {"method": "fft", "cutoff": 0.5},
     },
     "vessel_seg": {
-        "convert_mask_to_contour": True,
+        "convert_mask_to_contour": False,
         "return_multiple_contours": False,
         "contour_draw_centerline_radius": None,
         "contour_smooth_params": {"method": "fft", "cutoff": 0.5},

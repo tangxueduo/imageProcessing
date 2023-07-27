@@ -197,9 +197,10 @@ def gray2rgb_array(gray_array, ww, wl, is_colormap=False):
 
     if not is_colormap:
         rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1], 3))
-        rgb_array[:, :, 0] = temp_array
-        rgb_array[:, :, 1] = temp_array
-        rgb_array[:, :, 2] = temp_array
+        rgb_array = np.repeat(temp_array[..., None], 3, axis=-1)
+        # rgb_array[:, :, 0] = temp_array
+        # rgb_array[:, :, 1] = temp_array
+        # rgb_array[:, :, 2] = temp_array
     else:
         rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1]))
     return rgb_array

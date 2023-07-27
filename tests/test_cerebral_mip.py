@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 from vtkmodules.util.vtkImageExportToArray import vtkImageExportToArray
 from vtkmodules.util.vtkImageImportFromArray import vtkImageImportFromArray
 
-from tests.constants import IntracranialVR
+from tests.constants import MIP_POSITION_SHAPE_MAP, IntracranialVR
 from utils.boundbox import boundbox_3d
 
 FONT_SIZE = 18
@@ -258,7 +258,7 @@ def get_st_ed(
     sitk_image,
     image_count: int,
     thickness: float,
-    thick_interval: float,
+    slice_interval: float,
     azimuth_type: str = "axial",
 ):
     """ "
@@ -276,94 +276,31 @@ def get_st_ed(
     intracranial_img.SetSpacing(spacing)
     intracranial_img.SetOrigin(origin)
     intracranial_img.SetDirection(sitk_image.GetDirection())
+    left_num = image_count // 2
+    total = img_arr.shape[MIP_POSITION_SHAPE_MAP[azimuth_type]]
+    mid = total // 2
     if azimuth_type == MIPPostion.AXIAL:
-        mid = img_arr.shape[0] // 2
-        mid_phyc = list(intracranial_img.TransformIndexToPhysicalPoint([mid, 0, 0]))[0]
-        left_num = image_count // 2
-        right_num = image_count - left_num
-        st = intracranial_img.TransformPhysicalPointToIndex(
-            [mid_phyc - left_num * (thick_interval + thickness), origin[1], origin[2]]
-        )[0]
+        # 层厚层数
         slab_interval = int((thickness) // spacing[2])
-        pixel_interval = int((thick_interval) // spacing[2])
-        if st < 0:
-            st = 0
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    origin[0] + image_count * (thick_interval + thickness),
-                    origin[1],
-                    origin[2],
-                ]
-            )[0]
-        else:
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    mid_phyc + right_num * (thick_interval + thickness),
-                    origin[1],
-                    origin[2],
-                ]
-            )[0]
-        if end_index > img_arr.shape[0]:
-            end_index = img_arr.shape[0]
+        # 层间距层数
+        pixel_interval = int((slice_interval) // spacing[2])
     elif azimuth_type == MIPPostion.SAGITTAL:
-        mid = img_arr.shape[2] // 2
-        mid_phyc = list(intracranial_img.TransformIndexToPhysicalPoint([0, 0, mid]))[2]
-        left_num = image_count // 2
-        right_num = image_count - left_num
-        st = intracranial_img.TransformPhysicalPointToIndex(
-            [origin[0], origin[1], mid_phyc - left_num * (thick_interval + thickness)]
-        )[2]
         slab_interval = int((thickness) // spacing[1])
-        pixel_interval = int((thick_interval) // spacing[1])
-        if st < 0:
-            st = 0
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    origin[0],
-                    origin[1],
-                    origin[2] + image_count * (thick_interval + thickness),
-                ]
-            )[2]
-        else:
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    origin[0],
-                    origin[1],
-                    mid_phyc + right_num * (thick_interval + thickness),
-                ]
-            )[2]
-        if end_index > img_arr.shape[2]:
-            end_index = img_arr.shape[2]
+        pixel_interval = int((slice_interval) // spacing[1])
     else:
-        mid = img_arr.shape[1] // 2
-        mid_phyc = list(intracranial_img.TransformIndexToPhysicalPoint([0, 0, mid]))[1]
-        left_num = image_count // 2
-        right_num = image_count - left_num
-        st = intracranial_img.TransformPhysicalPointToIndex(
-            [origin[0], mid_phyc - left_num * (thick_interval + thickness), origin[2]]
-        )[1]
-        slab_interval = int((thickness) // spacing[1])
-        pixel_interval = int((thick_interval) // spacing[1])
-        if st < 0:
-            st = 0
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    origin[0],
-                    origin[1] + image_count * (thick_interval + thickness),
-                    origin[2],
-                ]
-            )[1]
-        else:
-            end_index = intracranial_img.TransformPhysicalPointToIndex(
-                [
-                    origin[0],
-                    mid_phyc + right_num * (thick_interval + thickness),
-                    origin[2],
-                ]
-            )[1]
-        if end_index > img_arr.shape[1]:
-            end_index = img_arr.shape[1]
-    logger.warning(f"mid_phyc: {mid_phyc}, origin: {origin}, spacing: {spacing}")
+        slab_interval = int((thickness) // spacing[0])
+        pixel_interval = int((slice_interval) // spacing[0])
+    if image_count == 1:
+        st = mid - slab_interval // 2
+        end_index = st + image_count * slab_interval
+    else:
+        st = mid - slab_interval // 2 - (left_num * (slab_interval + pixel_interval))
+        end_index = st + image_count * (slab_interval + pixel_interval)
+    if st < 0:
+        st = 0
+    if end_index > total:
+        end_index = total
+    logger.warning(f"origin: {origin}, spacing: {spacing}")
     logger.warning(
         f"start_index: {st}, end_index: {end_index}, slab_Interval: {slab_interval}, pixel_interval: {pixel_interval}"
     )
@@ -439,9 +376,9 @@ def gen_mip(
 
 @pytest.fixture()
 def data():
-    root_dir = "/media/tx-deepocean/Data/DICOMS/demos/mra"
+    root_dir = "/media/tx-deepocean/Data/DICOMS/demos/ct_cerebral"
     bone_nii = os.path.join(
-        root_dir, "1.2.392.200036.9116.2.6.1.37.2420991567.1550193082.682249.nii.gz"
+        root_dir, "1.3.46.670589.33.1.63781375540732021100003.4976359143335436991.mhd"
     )
     bone_img = sitk.ReadImage(bone_nii)
     seg_path = os.path.join(root_dir, "cerebral-seg.nii.gz")
@@ -455,9 +392,9 @@ def test_mip(data):
     gen_mip(
         sitk_image,
         seg_arr,
-        thickness=20,
-        thick_interval=10,
-        image_count=5,
+        thickness=5,
+        thick_interval=5,
+        image_count=1,
         azimuth_type="coronal",
     )
     logger.info(f"gen_mip cost: {time.time() - t_mip}")
