@@ -81,7 +81,3 @@
 # }
 # requests.put(url=treeline_url, json=treeline)
 # url = requests.get("").json()
-
-import SimpleITK as sitk
-
-a = sitk.GetArrayFromImage(None)
