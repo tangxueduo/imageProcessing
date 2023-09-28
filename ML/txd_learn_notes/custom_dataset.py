@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 torchvision 是pytorch 中专门用来处理图像的库,含有四个大类
     torchvision.datasets 加载数据集
