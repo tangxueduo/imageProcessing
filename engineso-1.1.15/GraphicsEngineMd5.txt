@@ -1,8 +1,0 @@
-c98f802809e5688f085b3cfaab0fb96d  libutils.so
-a1ffad268d47271a32c0ff7da5fec27e  libdicom_engine.so
-c824b39374f9345fd6c6db7f14c1e56a  libAlgorithmLib.so
-4076b259c74596bad27c3b523515f02a  libgpualg.so
-8a609a4c927b1258f3d9f7085f0cf2c7  libConfiguration.so
-80b5fcd0155522c0a63865ed46fdc7d5  libcontroller.so
-17e1c337b4dd1f29f756ce7a0085718a  libImagingEngineLib.so
-16d60fa819a0c24706cb45e80b38d29b  libInteractiveGraphicsEngine.so

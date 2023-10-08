@@ -1,6 +1,6 @@
 import argparse
 
-import torch
+# import torch
 from PIL import Image
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
@@ -13,12 +13,13 @@ def parse_opt(known=False):
     parser.add_argument(
         "--img_path", type=str, default=f"{ROOT}/cat.jpeg", help="add image abs path"
     )
+    print(f"parse_known_args: {parser.parse_known_args()}")
     return parser.parse_known_args()[0] if known else parser.parse_args()
 
 
 def convert_img_to_tensor(img_path):
     img = Image.open(img_path)
-    print(img)
+    # print(img)
     convert_tensor = transforms.Compose([transforms.ToTensor()])
     img = convert_tensor(img)
 
