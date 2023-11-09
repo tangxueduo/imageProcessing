@@ -1,0 +1,12 @@
+version: "2.3"
+services:
+  radiomics:
+    image: radiomics/pyradiomics:latest
+    build:
+      context: .
+    volumes:
+      - /media/tx-deepocean/Data/DICOMS:/media/tx-deepocean/Data/DICOMS
+    ports:
+      - 5000:5000
+    environment:
+      - TZ=Asia/Shanghai
