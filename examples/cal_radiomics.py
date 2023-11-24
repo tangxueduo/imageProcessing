@@ -27,7 +27,7 @@ if (
     NUM_OF_WORKERS < 1
 ):  # in case only one processor is available, ensure that it is used
     NUM_OF_WORKERS = 1
-PARAMS = os.path.join("examples/Params.yaml")
+# PARAMS = os.path.join("examples/Params.yaml")
 CUSTOM_IMAGE_TYPES = {
     "Original": {},
     "Square": {},
@@ -44,15 +44,17 @@ class GetRadiomics:
     def __init__(self) -> None:
         self.result = requests.get(url).json()
         # 准备基础数据 sitk_image, mask
-        image_path = (
+        self.image_path = str(
             ROOT_DIR
             / "1.2.392.200036.9116.2.6.1.44063.1796265406.1656894518.71296.nii.gz"
         )
         # self.image_nrrd_path = convert_nifti_to_nrrd(str(image_path))
 
-        self.image = sitk.ReadImage(str(image_path))
+        self.image = sitk.ReadImage(self.image_path)
+        self.image = sitk.Cast(self.image, sitk.sitkInt16)
         self.origin = self.image.GetOrigin()
-        self.shape = self.image.GetSize()[::-1]
+        self.shape = self.image.GetSize()
+        logger.warning(f"shape: {self.shape}")
         self.spacing = self.image.GetSpacing()
         logger.info("Init over")
         self.settings = {
@@ -69,16 +71,22 @@ class GetRadiomics:
         t0 = time.time()
         nodule_id = req["nodule_id"]
         # 结节轮廓转mask
-        mask_path = "./nodule.nii.gz"
+        # mask_path = "./nodule.nii.gz"
         # convert_contour_to_mask(
         #     nodule_id, self.result, self.origin, self.shape, self.spacing, mask_path, self.mask_lib
         # )
         mask_np = np.zeros_like(sitk.GetArrayFromImage(self.image))
-        mask_np[5:7, 5:7, 5:6] = 255
+        mask_np[5:10, 5:10, 5:6] = 1
         self.mask = sitk.GetImageFromArray(mask_np)
         self.mask.CopyInformation(self.image)
+        self.mask = sitk.Cast(self.mask, sitk.sitkInt16)
+        # write to nrrd
+        nrrd_path = str(ROOT_DIR / "image.nrrd")
+        sitk.WriteImage(self.image, nrrd_path, True)
+        sitk.WriteImage(self.mask, str(ROOT_DIR / "mask.nrrd"), True)
+
         # mask = sitk.ReadImage(mask_path)
-        inputCSV = "/media/tx-deepocean/Data/DICOMS/demos/ct_heart/input.csv"
+        # inputCSV = "/media/tx-deepocean/Data/DICOMS/demos/ct_heart/input.csv"
         results = cal_custom_radiomics(
             self.settings, CUSTOM_IMAGE_TYPES, self.image, self.mask
         )
@@ -102,7 +110,7 @@ class GetRadiomics:
         return results
 
 
-def cal_custom_radiomics(settings, enable_image_types, image, mask, label=255):
+def cal_custom_radiomics(settings, enable_image_types, image, mask, label=1):
     extractor = featureextractor.RadiomicsFeatureExtractor(**settings)
     logger.info(f"Extraction parameters:\n\t, {extractor.settings}")
     # 原图，　平方，　梯度，指数，高斯拉普拉斯，小波，对数　每个内层dict里面还可以传递公式的其他因子
@@ -113,7 +121,12 @@ def cal_custom_radiomics(settings, enable_image_types, image, mask, label=255):
     # extractor.enableImageTypeByName('Original')
 
     extractor.enableAllFeatures()
-    result = extractor.execute(image, mask, label=label)
+    # result = extractor.execute(image, mask, label=label)
+    result = extractor.execute(
+        "/media/tx-deepocean/Data/DICOMS/demos/ct_heart/image.nrrd",
+        "/media/tx-deepocean/Data/DICOMS/demos/ct_heart/mask.nrrd",
+        label=label,
+    )
     logger.warning(len(result))
     # 过滤只返回array 结果数值
     result = {
