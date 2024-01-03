@@ -19,9 +19,9 @@ from python_demos.mismatch_utils import (
     LEFT_BRAIN_LABEL,
     RIGHT_BRAIN_LABEL,
     ddict2dict,
-    gray2rgb_array,
     judge_average_all,
 )
+from utils.deal_hu import gray2rgb_array_by_window
 
 ds = pydicom.read_file(
     "/media/tx-deepocean/Data/DICOMS/demos/1.3.12.2.1107.5.1.4.73767.30000015112323443037500014176/1.3.12.2.1107.5.1.4.73767.30000015112323443037500015002",
@@ -152,7 +152,7 @@ class Mismatch:
             cbf_2d_arr = self.low_cbf_array[dcm_idx, :, :]
             tmax_2d_arr = self.low_tmax_array[dcm_idx, :, :]
             # 染色
-            tmip_3d_arr = gray2rgb_array(
+            tmip_3d_arr = gray2rgb_array_by_window(
                 self.tmip_no_skull_arr[dcm_idx, :, :], ww=100, wl=50, is_colormap=False
             ).copy()
             tmip_3d_arr[cbf_2d_arr == 1] = COLOR_MAP[Mismatch_thresholds[0]["color"]]
@@ -179,7 +179,7 @@ class Mismatch:
             _2d_mid_arr = alo_mid_array[dcm_idx, :, :]
             _2d_high_arr = algo_high_aray[dcm_idx, :, :]
             # 染色
-            tmip_3d_arr = gray2rgb_array(
+            tmip_3d_arr = gray2rgb_array_by_window(
                 self.tmip_no_skull_arr[dcm_idx, :, :], ww=100, wl=50, is_colormap=False
             ).copy()
             tmip_3d_arr[np.where(_2d_low_arr == 1)] = COLOR_MAP[thresholds[0]["color"]]

@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import SimpleITK as sitk
 
+from utils.deal_hu import gray2rgb_array_by_window
+
 custom_map = [
     [0, 0, 0.5019607843137255],
     [0, 0, 0.5176470588235295],
@@ -264,28 +266,6 @@ custom_map = [
 ]
 
 
-def gray2rgb_array(gray_array):
-    temp_array = gray_array
-    # max_pt = np.max(temp_array)
-    # min_pt = np.min(temp_array)
-    window_width = 20
-    window_level = 10
-    true_max_pt = window_level + (window_width / 2)
-    true_min_pt = window_level - (window_width / 2)
-
-    scale = 255 / (true_max_pt - true_min_pt)
-    temp_array = np.clip(temp_array, true_min_pt, true_max_pt)
-    min_pt_array = np.ones((temp_array.shape[0], temp_array.shape[1])) * true_min_pt
-    temp_array = (temp_array - min_pt_array) * scale
-
-    rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1]))
-    # rgb_array[:, :, 0] = temp_array
-    # rgb_array[:, :, 1] = temp_array
-    # rgb_array[:, :, 2] = temp_array
-    rgb_array = temp_array
-    return rgb_array
-
-
 if __name__ == "__main__":
     cbf_img = sitk.ReadImage("/media/tx-deepocean/Data/DICOMS/demos/28/MTT.nii.gz")
     depth = cbf_img.GetDepth()
@@ -295,7 +275,7 @@ if __name__ == "__main__":
     t0 = time.time()
     cbf_gray_arr = cbf_arr[10, :, :]
 
-    rgb_arr = gray2rgb_array(cbf_gray_arr)
+    rgb_arr = gray2rgb_array_by_window(cbf_gray_arr)
     custom_map_arr = np.array(custom_map)
     custom_map_arr = np.squeeze(
         np.dstack([custom_map_arr[:, 2], custom_map_arr[:, 1], custom_map_arr[:, 0]]), 0

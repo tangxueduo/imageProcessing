@@ -4,29 +4,6 @@ from PIL import Image, ImageDraw, ImageFont
 FONT = ImageFont.truetype("statics/SourceHanSansCN-Normal.ttf", 18)
 
 
-def gray2rgb_array(gray_array, ww, wl, is_colormap=False):
-    temp_array = gray_array
-    window_width = ww
-    window_level = wl
-    true_max_pt = window_level + (window_width / 2)
-    true_min_pt = window_level - (window_width / 2)
-
-    scale = 255 / (true_max_pt - true_min_pt)
-    temp_array = np.clip(temp_array, true_min_pt, true_max_pt)
-    min_pt_array = np.ones((temp_array.shape[0], temp_array.shape[1])) * true_min_pt
-    temp_array = (temp_array - min_pt_array) * scale
-
-    if not is_colormap:
-        rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1], 3))
-        rgb_array = np.repeat(temp_array[..., None], 3, axis=-1)
-        # rgb_array[:, :, 0] = temp_array
-        # rgb_array[:, :, 1] = temp_array
-        # rgb_array[:, :, 2] = temp_array
-    else:
-        rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1]))
-    return rgb_array
-
-
 def bgr_to_rgb(rgb_array):
     rgb_array = rgb_array.astype(np.uint8)
     rgb_array = rgb_array[:, :, ::-1]

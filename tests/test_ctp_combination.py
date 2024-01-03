@@ -18,7 +18,8 @@ from utils.constants import (
     ROI_ROWS_TITLE,
     SCREENSHOTS_COMBINATION_TYPES,
 )
-from utils.img_process import bgr_to_rgb, color_draw_text, gray2rgb_array
+from utils.deal_hu import gray2rgb_array_by_window
+from utils.img_process import bgr_to_rgb, color_draw_text
 
 FONT = ImageFont.truetype("statics/SourceHanSansCN-Normal.ttf", 18)
 roi_data = {
@@ -81,7 +82,9 @@ def gen_color_img(gray_img, image_type: str, best_window: dict):
     ww = best_window[image_type][0]
     wl = best_window[image_type][1]
     max_hu, min_hu = (wl + (ww / 2)), (wl - ww / 2)
-    bgr_arr = gray2rgb_array(gray_img, ww, wl, is_colormap=True).astype("uint8")
+    bgr_arr = gray2rgb_array_by_window(gray_img, ww, wl, is_colormap=True).astype(
+        "uint8"
+    )
     # lut 自定义映射
     custom_map_arr = np.array(CUSTOM_MAP)
 
@@ -168,7 +171,7 @@ def get_combination_images(
             v = mask_array_map[k]
             # 灰度图
             if k == "tMIP":
-                origin_img_np = gray2rgb_array(
+                origin_img_np = gray2rgb_array_by_window(
                     v[index, :, :].astype("int16"),
                     best_window_for_comb["tMIP"][0],
                     best_window_for_comb["tMIP"][1],

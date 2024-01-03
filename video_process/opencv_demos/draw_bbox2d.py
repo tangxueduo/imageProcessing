@@ -5,6 +5,8 @@ import numpy as np
 import pydicom
 import SimpleITK as sitk
 
+from utils.deal_hu import gray2rgb_array_by_window
+
 """需要考虑根据label 的 position， 确认 contour 属于 同label的 label1 还是 label2"""
 
 dcm_path = "/media/tx-deepocean/Data/DICOMS/ct_cerebral/CN010002-13696724/1.2.840.113619.2.416.10634142502611409964348085056782520111/1.2.840.113619.2.416.77348009424380358976506205963520437809/1.2.840.113619.2.416.2106685279137426449336212617073446717.1"
@@ -37,23 +39,6 @@ def find_contours(mask: np.ndarray, label: int, position: int, idx: int) -> list
     return contours
 
 
-def gray2rgb_array(gray_array):
-    temp_array = gray_array
-    window_width = 1700
-    window_level = -600
-    true_max_pt = window_level + (window_width / 2)
-    true_min_pt = window_level - (window_width / 2)
-    scale = 255 / (true_max_pt - true_min_pt)
-    temp_array = np.clip(temp_array, true_min_pt, true_max_pt)
-    min_pt_array = np.ones((temp_array.shape[0], temp_array.shape[1])) * true_min_pt
-    temp_array = (temp_array - min_pt_array) * scale
-    rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1], 3))
-    rgb_array[:, :, 0] = temp_array
-    rgb_array[:, :, 1] = temp_array
-    rgb_array[:, :, 2] = temp_array
-    return rgb_array
-
-
 def np_array_to_dcm(ds, np_array):
     ww = 255
     wl = 127
@@ -74,7 +59,7 @@ def np_array_to_dcm(ds, np_array):
 
 def find_2d_contours(slice_arr, label):
     """后面可根据具体需要可过滤部分 contour"""
-    rgb_arr = gray2rgb_array(slice_arr)
+    rgb_arr = gray2rgb_array_by_window(slice_arr)
     cv.imwrite("./result.png", rgb_arr)
     binary_arr = np.zeros(slice_arr.shape)
     binary_arr[slice_arr == 100] = 1

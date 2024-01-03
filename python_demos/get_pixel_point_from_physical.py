@@ -3,9 +3,13 @@ import math
 import cv2
 import numpy as np
 import SimpleITK as sitk
-from mismatch_utils import (convert_ijk_to_xyz,
-                            convert_noraml_to_standard_plane,
-                            get_point_on_plane_by_yz, gray2rgb_array)
+from mismatch_utils import (
+    convert_ijk_to_xyz,
+    convert_noraml_to_standard_plane,
+    get_point_on_plane_by_yz,
+)
+
+from utils.deal_hu import gray2rgb_array_by_window
 
 origin = [-123.0, 10.300000190734863, 193.8000030517578]
 spacing = np.array([0.48828125, 0.48828125, 5])
@@ -21,7 +25,7 @@ tmip_array = sitk.GetArrayFromImage(tmip_img)
 spacing = np.array([0.48828125, 0.48828125, 5])
 dcm_slice = 14
 gray_array = tmip_array[dcm_slice, :, :]
-rgb_array = gray2rgb_array(gray_array, 100, 50)
+rgb_array = gray2rgb_array_by_window(gray_array, 100, 50)
 
 
 def get_line_coord(
