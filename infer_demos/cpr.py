@@ -8,7 +8,7 @@ import numpy as np
 from numpy.ctypeslib import ndpointer
 from PIL import Image
 
-from infer_test.curve_interplolator import CurveInterpolator
+from infer_demos.curve_interplolator import CurveInterpolator
 
 # from common.comb_process_fucs import (
 #     get_cpr_cursor,

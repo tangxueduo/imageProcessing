@@ -8,8 +8,8 @@ import pydicom
 import requests
 import SimpleITK as sitk
 
-from infer_test.cpr import CoronaryCprPredictor
-from infer_test.utils import get_lps_ijk
+from infer_demos.cpr import CoronaryCprPredictor
+from infer_demos.utils import get_lps_ijk
 
 """
 已知中线 及 dicom 物理信息, 计算任意角度cpr

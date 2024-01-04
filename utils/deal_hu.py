@@ -31,7 +31,6 @@ def gray2rgb_array_by_window(
     temp_array = (temp_array - min_pt_array) * scale
 
     if not is_colormap:
-        rgb_array = np.zeros((temp_array.shape[0], temp_array.shape[1], 3))
         rgb_array = np.repeat(temp_array[..., None], 3, axis=-1)
     else:
         rgb_array = temp_array
