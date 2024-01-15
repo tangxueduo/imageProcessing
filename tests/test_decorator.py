@@ -10,7 +10,7 @@ from loguru import logger
 
 
 def timer(func):
-    """实现一个时间统计"""
+    """实现一个时间统计装饰器"""
     t0 = time.time()
 
     @functools.wraps(func)
